@@ -1,0 +1,348 @@
+/**
+ * dsh-recall-plugin — Client 半（运行在 DSH Web GUI 页面）
+ *
+ * 职责：注册 conversation.chat.node 的 user 渲染器，重绘用户消息气泡
+ * （文本/图片/JSON 块），在复制按钮旁加「撤回」按钮；二次确认面板展示
+ * 文件变更清单，确认后调用 Host RPC 回退文件并用官方 sessions.fork
+ * 把对话一并回退（新会话打开、原会话归档）。
+ *
+ * 用法：将本文件内容作为 cordis_define 的 code.client（函数体），
+ * host.js 作为 code.host，然后 cordis_run。
+ */
+return {
+  inject: ['slots', 'timer'],
+  apply(ctx) {
+    const slots = ctx.get('slots')
+    if (!slots) return
+    // 官方会话服务：fork 到已完成 turn 前缀 + open 切到新会话；
+    // workspaces 的归档只是从列表隐藏、可恢复，用来收走回退前的原会话。
+    const sessionsSvc = ctx.get('sessions')
+    const workspacesSvc = ctx.get('workspaces')
+
+    styles.insert([
+      '.dsh-recall-row{flex-direction:column;align-items:flex-end;gap:6px;display:flex}',
+      '.dsh-recall-stack{flex-direction:column;align-items:flex-end;gap:8px;min-width:0;max-width:min(525px,82%);display:flex}',
+      '.dsh-recall-bubble{background:var(--dsw-specific-bubble);max-width:100%;color:var(--dsw-alias-label-primary);border-radius:22px;padding:10px 16px;font-size:16px;line-height:24px;white-space:pre-wrap;word-break:break-word}',
+      '.dsh-recall-img{max-width:100%;max-height:320px;border-radius:12px;object-fit:contain}',
+      '.dsh-recall-json{margin:0;max-width:100%;font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);white-space:pre-wrap;word-break:break-word;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:8px 10px;background:var(--dsw-alias-markdown-code-block)}',
+      '.dsh-recall-actions{align-items:center;gap:10px;height:28px;display:flex}',
+      '.dsh-recall-time{color:var(--dsw-alias-label-tertiary);white-space:nowrap;padding-right:12px;font-size:14px;line-height:24px}',
+      '.dsh-recall-action{width:28px;height:28px;color:var(--dsw-alias-label-tertiary);cursor:pointer;background:0 0;border:none;border-radius:28px;justify-content:center;align-items:center;padding:6px;display:inline-flex}',
+      '.dsh-recall-action:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-secondary)}',
+      '@media (hover:hover){[data-time-hover-root] .dsh-recall-time{opacity:0;transition:opacity 80ms}[data-time-hover-root]:hover .dsh-recall-time,[data-time-hover-root]:focus-within .dsh-recall-time{opacity:1}}',
+      '.dsh-recall-panel{width:min(480px,100%);box-sizing:border-box;background:var(--dsw-alias-bg-base);border:1px solid var(--dsw-alias-border-l1);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;text-align:left;box-shadow:0 8px 28px rgba(0,0,0,.22)}',
+      '.dsh-recall-panel-title{color:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;line-height:22px}',
+      '.dsh-recall-panel-note{color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px;word-break:break-word}',
+      '.dsh-recall-list{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:2px;padding:4px 0}',
+      '.dsh-recall-file{display:flex;gap:8px;align-items:baseline;font-size:12px;line-height:20px}',
+      '.dsh-recall-badge{flex:none;font-size:11px;line-height:18px;padding:0 6px;border-radius:6px}',
+      '.dsh-recall-badge-modified{color:var(--dsw-alias-state-error-primary);background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dsh-recall-badge-restored{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dsh-recall-badge-added{color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dsh-recall-rel{min-width:0;color:var(--dsw-alias-label-primary);word-break:break-all;font-family:var(--dsw-font-code, ui-monospace, SFMono-Regular, Consolas, monospace)}',
+      '.dsh-recall-panel-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:2px}',
+      '.dsh-recall-btn{border:none;border-radius:8px;padding:5px 14px;font-size:13px;line-height:20px;cursor:pointer;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover)}',
+      '.dsh-recall-btn:hover{color:var(--dsw-alias-label-primary)}',
+      '.dsh-recall-btn-danger{background:var(--dsw-alias-state-error-primary);color:#fff}',
+      '.dsh-recall-btn-danger:hover{color:#fff;filter:brightness(1.08)}'
+    ].join(''))
+
+    let initedSessionId = null
+
+    // 每个会话只向 Host 注册一次（预热其根目录解析缓存）
+    function ensureInit(sessionId) {
+      if (!sessionId || initedSessionId === sessionId) return
+      initedSessionId = sessionId
+      host.call('init', { sessionId }).catch(() => {})
+    }
+
+    // 消息时间：当天只显示时分，跨天显示月/日 时分
+    function clockText(ms) {
+      try {
+        const d = new Date(ms)
+        const now = new Date()
+        const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate()
+        const hh = String(d.getHours()).padStart(2, '0')
+        const mm = String(d.getMinutes()).padStart(2, '0')
+        return sameDay ? hh + ':' + mm : (d.getMonth() + 1) + '/' + d.getDate() + ' ' + hh + ':' + mm
+      } catch (e) {
+        return ''
+      }
+    }
+
+    // 复制按钮走浏览器剪贴板；动态客户端无 primitives 依赖，直接调用并带降级
+    function writeClipboard(text) {
+      try {
+        if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+          return navigator.clipboard.writeText(text).then(() => true, () => false)
+        }
+      } catch (e) { /* fall through */ }
+      try {
+        if (typeof document !== 'undefined' && typeof document.execCommand === 'function') {
+          const el = document.createElement('textarea')
+          el.value = text
+          el.setAttribute('readonly', '')
+          el.style.position = 'fixed'
+          el.style.left = '-9999px'
+          document.body.appendChild(el)
+          el.select()
+          try {
+            return Promise.resolve(document.execCommand('copy'))
+          } finally {
+            el.remove()
+          }
+        }
+      } catch (e) { /* ignore */ }
+      return Promise.resolve(false)
+    }
+
+    function CopyIcon() {
+      return React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, 'aria-hidden': true },
+        React.createElement('rect', { x: 5.5, y: 5.5, width: 8, height: 8, rx: 1.5 }),
+        React.createElement('path', { d: 'M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5' })
+      )
+    }
+
+    function CheckIcon() {
+      return React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+        React.createElement('path', { d: 'm3 8.5 3.2 3.2L13 5' })
+      )
+    }
+
+    function UndoIcon() {
+      return React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true },
+        React.createElement('path', { d: 'M7.5 3.5 3.5 7.5l4 4' }),
+        React.createElement('path', { d: 'M4.5 7.5h5a3 3 0 0 1 0 6H8' })
+      )
+    }
+
+    function useImageSrc(attachment, loadImage) {
+      const [src, setSrc] = React.useState(null)
+      React.useEffect(() => {
+        let alive = true
+        if (!attachment || typeof loadImage !== 'function') return undefined
+        Promise.resolve(loadImage(attachment)).then((url) => {
+          if (alive && url) setSrc(String(url))
+        }).catch(() => {})
+        return () => { alive = false }
+      }, [attachment, loadImage])
+      return src
+    }
+
+    function ImageBox(props) {
+      const src = useImageSrc(props.attachment, props.loadImage)
+      if (!src) return null
+      return React.createElement('img', { className: 'dsh-recall-img', src, alt: '' })
+    }
+
+    const KIND_LABEL = { modified: '修改', restored: '恢复', added: '删除' }
+
+    function summaryText(counts) {
+      const parts = []
+      if (counts.modified > 0) parts.push('修改 ' + counts.modified)
+      if (counts.restored > 0) parts.push('恢复 ' + counts.restored)
+      if (counts.added > 0) parts.push('删除 ' + counts.added)
+      return parts.join(' · ')
+    }
+
+    function recallPanel(recall, closePanel, executeRecall) {
+      if (recall.stage === 'loading') {
+        return React.createElement('div', { className: 'dsh-recall-panel' },
+          React.createElement('div', { className: 'dsh-recall-panel-title' }, '正在计算变更…')
+        )
+      }
+      if (recall.stage === 'error') {
+        return React.createElement('div', { className: 'dsh-recall-panel' },
+          React.createElement('div', { className: 'dsh-recall-panel-title' }, '无法回退'),
+          React.createElement('div', { className: 'dsh-recall-panel-note' }, recall.message || ''),
+          React.createElement('div', { className: 'dsh-recall-panel-actions' },
+            React.createElement('button', { type: 'button', className: 'dsh-recall-btn', onClick: closePanel }, '关闭')
+          )
+        )
+      }
+      if (recall.stage === 'confirm') {
+        const changes = recall.changes || []
+        const counts = { modified: 0, restored: 0, added: 0 }
+        for (const c of changes) {
+          if (c && counts[c.kind] !== undefined) counts[c.kind]++
+        }
+        const rows = changes.map((c, i) => React.createElement('div', { className: 'dsh-recall-file', key: i },
+          React.createElement('span', { className: 'dsh-recall-badge dsh-recall-badge-' + (c.kind || '') }, KIND_LABEL[c.kind] || c.kind || ''),
+          React.createElement('span', { className: 'dsh-recall-rel' }, c.rel || '')
+        ))
+        // cutSeq 为 null 表示该消息是会话第一条用户消息：文件可回退但对话无从回退
+        const canRevertChat = typeof recall.cutSeq === 'number'
+        return React.createElement('div', { className: 'dsh-recall-panel' },
+          React.createElement('div', { className: 'dsh-recall-panel-title' }, '整段回退'),
+          React.createElement('div', { className: 'dsh-recall-panel-note' },
+            '将项目恢复到' + (recall.time ? ' ' + clockText(recall.time) + ' ' : ' ') + '发送该消息时的状态。共 ' + changes.length + ' 个文件将变更' + (summaryText(counts) ? '（' + summaryText(counts) + '）' : '') + '。此操作会覆盖当前文件内容，不会自动创建备份。'
+          ),
+          React.createElement('div', { className: 'dsh-recall-panel-note' },
+            canRevertChat
+              ? '对话将一并回退到该消息之前：该消息及之后的全部对话会从当前视图移除，原会话归档保存（可从归档找回）。'
+              : '该消息是本会话中第一条用户消息，无法回退对话；确认后仅回退项目文件。'
+          ),
+          changes.length > 0 ? React.createElement('div', { className: 'dsh-recall-list' }, ...rows) : null,
+          React.createElement('div', { className: 'dsh-recall-panel-actions' },
+            React.createElement('button', { type: 'button', className: 'dsh-recall-btn', onClick: closePanel }, '取消'),
+            React.createElement('button', { type: 'button', className: 'dsh-recall-btn dsh-recall-btn-danger', onClick: executeRecall }, '确认回退')
+          )
+        )
+      }
+      if (recall.stage === 'executing') {
+        return React.createElement('div', { className: 'dsh-recall-panel' },
+          React.createElement('div', { className: 'dsh-recall-panel-title' }, '正在回退…')
+        )
+      }
+      if (recall.stage === 'done') {
+        return React.createElement('div', { className: 'dsh-recall-panel' },
+          React.createElement('div', { className: 'dsh-recall-panel-title' }, '回退完成'),
+          React.createElement('div', { className: 'dsh-recall-panel-note' },
+            recall.chatReverted
+              ? '项目文件与对话已回退到该消息之前。新会话已打开，原会话已归档（可从归档找回）。'
+              : '项目已恢复到发送该消息时的状态。' + (recall.chatError ? ' 对话回退失败：' + recall.chatError : '')
+          ),
+          React.createElement('div', { className: 'dsh-recall-panel-actions' },
+            React.createElement('button', { type: 'button', className: 'dsh-recall-btn', onClick: closePanel }, '关闭')
+          )
+        )
+      }
+      return null
+    }
+
+    function UserRecallNode(props) {
+      const node = props && props.node
+      const loadImage = props && props.loadImage
+      const sessionId = props && props.sessionId
+      const data = node && node.data ? node.data : {}
+      // node.id 是会话事件匹配时写入的真实消息 ID；node.key 是位置键（如 13:input），不能用于快照查询
+      const messageId = node ? String(node.id || node.key || '') : ''
+      const blocks = Array.isArray(data.content) ? data.content : []
+      const text = blocks.filter((b) => b && b.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('')
+      const images = blocks.filter((b) => b && b.type === 'image' && b.attachment).map((b) => b.attachment)
+      const rest = blocks.filter((b) => !b || !(b.type === 'text' && typeof b.text === 'string') && !(b.type === 'image' && b.attachment))
+
+      const [copied, setCopied] = React.useState(false)
+      const [hasSnapshot, setHasSnapshot] = React.useState(false)
+      const [recall, setRecall] = React.useState({ stage: 'idle' })
+
+      React.useEffect(() => {
+        ensureInit(sessionId)
+        if (!messageId) return undefined
+        let alive = true
+        host.call('snapshot-info', { messageId }).then((res) => {
+          if (alive && res && res.has) setHasSnapshot(true)
+        }).catch(() => {})
+        return () => { alive = false }
+      }, [messageId, sessionId])
+
+      const onCopy = () => {
+        if (copied) return
+        writeClipboard(text).then(() => {
+          setCopied(true)
+          ctx.timeout(() => setCopied(false), 1200)
+        })
+      }
+
+      const openPreview = () => {
+        if (recall.stage === 'loading' || recall.stage === 'executing') return
+        setRecall({ stage: 'loading' })
+        host.call('recall-preview', { messageId, sessionId }).then((res) => {
+          if (!res || !res.ok) {
+            setRecall({ stage: 'error', message: (res && res.error) || '无法获取快照' })
+            return
+          }
+          setRecall({
+            stage: 'confirm',
+            changes: res.changes || [],
+            time: res.time || null,
+            cutSeq: typeof res.cutSeq === 'number' ? res.cutSeq : null
+          })
+        }).catch((error) => {
+          setRecall({ stage: 'error', message: String(error) })
+        })
+      }
+
+      const executeRecall = () => {
+        if (recall.stage !== 'confirm') return
+        const changes = recall.changes || []
+        const previewCut = typeof recall.cutSeq === 'number' ? recall.cutSeq : null
+        setRecall({ stage: 'executing', changes })
+        host.call('recall-execute', { messageId, sessionId }).then(async (res) => {
+          if (!res || !res.ok) {
+            setRecall({ stage: 'error', message: (res && res.error) || '回退失败' })
+            return
+          }
+          // 文件已回退；对话回退独立进行，失败只降级为“仅文件回退”而不是整体失败
+          const cutSeq = typeof res.cutSeq === 'number' ? res.cutSeq : previewCut
+          let chatReverted = false
+          let chatError = ''
+          if (cutSeq !== null && sessionsSvc && typeof sessionsSvc.fork === 'function') {
+            try {
+              const childId = await sessionsSvc.fork({ sessionId, atSeq: cutSeq, increaseTitle: true })
+              if (childId) {
+                if (typeof sessionsSvc.open === 'function') sessionsSvc.open(childId)
+                chatReverted = true
+                // 回退前的原会话归档：只是从列表隐藏、可恢复，避免侧栏出现两个近似会话
+                if (workspacesSvc && typeof workspacesSvc.archiveSession === 'function') {
+                  workspacesSvc.archiveSession(sessionId).catch(() => {})
+                }
+              } else {
+                chatError = '未返回新会话'
+              }
+            } catch (error) {
+              chatError = String(error)
+            }
+          }
+          setHasSnapshot(false)
+          setRecall({ stage: 'done', count: typeof res.count === 'number' ? res.count : changes.length, chatReverted, chatError })
+        }).catch((error) => {
+          setRecall({ stage: 'error', message: String(error) })
+        })
+      }
+
+      const closePanel = () => setRecall({ stage: 'idle' })
+
+      const bubbleChildren = []
+      if (text !== '') bubbleChildren.push(React.createElement('div', { className: 'dsh-recall-bubble', key: 'text' }, text))
+      for (let i = 0; i < images.length; i++) {
+        bubbleChildren.push(React.createElement(ImageBox, { key: 'img-' + i, attachment: images[i], loadImage }))
+      }
+      for (let i = 0; i < rest.length; i++) {
+        bubbleChildren.push(React.createElement('pre', { className: 'dsh-recall-json', key: 'rest-' + i }, JSON.stringify(rest[i], null, 2)))
+      }
+
+      const actions = []
+      actions.push(React.createElement('span', { className: 'dsh-recall-time', key: 'time' }, clockText(data.time)))
+      actions.push(React.createElement('button', {
+        key: 'copy',
+        type: 'button',
+        className: 'dsh-recall-action',
+        'aria-label': copied ? '已复制' : '复制',
+        title: copied ? '已复制' : '复制',
+        onClick: onCopy
+      }, copied ? React.createElement(CheckIcon, {}) : React.createElement(CopyIcon, {})))
+      if (hasSnapshot) {
+        actions.push(React.createElement('button', {
+          key: 'recall',
+          type: 'button',
+          className: 'dsh-recall-action',
+          'aria-label': '撤回',
+          title: '整段回退：文件与对话一并回到该消息之前',
+          onClick: openPreview
+        }, React.createElement(UndoIcon, {})))
+      }
+
+      return React.createElement('div', { className: 'dsh-recall-row', 'data-time-hover-root': true },
+        bubbleChildren.length > 0 ? React.createElement('div', { className: 'dsh-recall-stack', key: 'stack' }, ...bubbleChildren) : null,
+        React.createElement('div', { className: 'dsh-recall-actions', key: 'actions' }, ...actions),
+        recallPanel(recall, closePanel, executeRecall)
+      )
+    }
+
+    slots.inject('conversation.chat.node', () => slots.register(
+      { name: 'conversation.chat.node', key: 'user' },
+      UserRecallNode
+    ))
+  }
+}
