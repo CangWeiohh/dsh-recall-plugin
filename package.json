@@ -5,7 +5,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/limbo947/dsh-recall-plugin"
+    "url": "git+https://github.com/limbo947/dsh-recall-plugin.git"
   },
   "publishConfig": {
     "access": "public"
@@ -49,7 +49,9 @@
     "react": "^18.2.0"
   },
   "peerDependenciesMeta": {
-    "cordis": { "optional": true }
+    "cordis": {
+      "optional": true
+    }
   },
   "license": "MIT"
 }
