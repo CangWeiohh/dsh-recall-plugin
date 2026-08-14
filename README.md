@@ -36,13 +36,17 @@
 
 前置：Windows + git CLI（未装 git 时插件静默降级，不显示撤回按钮，不影响 DSH 运行）；PowerShell 5.1 / 7 均可；DSH 0.1.0-rc.x（依赖版本见 `peerDependencies`）。
 
-```powershell
-# DSH 官方插件命令：安装并自动挂载进 web profile
-dsh plugin --profile web add dsh-recall-plugin
-# 也可从 git 直接安装（纯 JS 无构建，免 prepare/allowBuilds）：
-# dsh plugin --profile web add github:limbo947/dsh-recall-plugin
 
-# 重启 DSH 进程（按你的启动方式，任选其一）
+- DSH 官方插件命令：安装并自动挂载进 web profile
+```powershell
+dsh plugin --profile web add dsh-recall-plugin
+```
+- 也可从 git 直接安装（纯 JS 无构建，免 prepare/allowBuilds）：
+```powershell
+dsh plugin --profile web add github:limbo947/dsh-recall-plugin
+```
+- 重启 DSH 进程（按你的启动方式，任选其一）
+```powershell
 dsh web                      # 前台直接启动
 pm2 restart <你的dsh进程名>   # 若用 pm2 托管
 ```
