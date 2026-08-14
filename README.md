@@ -1,6 +1,6 @@
 # dsh-recall-plugin
 
-DeepSeek Harness(DSH)动态 Cordis 插件:在用户消息气泡的复制按钮旁添加「撤回」按钮,把**项目文件**与**对话历史**一并回退到该消息发送之前(整段回退,参考 TraeWork 的 `revert_message` + 文件快照机制)。
+DeepSeek Harness(DSH)**持久插件**(bundle 形态,安装后一直生效):在用户消息气泡的复制按钮旁添加「撤回」按钮,把**项目文件**与**对话历史**一并回退到该消息发送之前(整段回退,参考 TraeWork 的 `revert_message` + 文件快照机制)。
 
 ## 功能
 
@@ -15,23 +15,28 @@ DeepSeek Harness(DSH)动态 Cordis 插件:在用户消息气泡的复制按钮�
 
 ```
 dsh-recall-plugin/
-├── host.js      # 插件 Host 半（快照、diff、回退、会话切点解析）
-├── client.js    # 插件 Client 半（气泡 UI、撤回按钮、确认面板、fork 调用）
-├── LICENSE      # MIT
+├── package.json       # dsh.bundle.patch + dsh.client 声明、peerDependencies
+├── cordis.patch.yml   # 挂载层（insert 自身行，CLI bundle 协调自动合并）
+├── lib/
+│   ├── index.js       # Host 半：影子 git 快照引擎 + /api/recall/* HTTP API
+│   └── client.js      # Client 半：气泡 UI、撤回按钮、确认面板（__ModuleLoader__ bundle）
+├── LICENSE            # MIT
 └── README.md
 ```
 
-## 安装(DSH 动态 Cordis 插件)
+## 安装(npm 发布后)
 
-1. 打开 DSH Web GUI,让 agent 用 `host.js` 与 `client.js` 的内容分别作为
-   `code.host`、`code.client`,通过 `cordis_define` 定义插件并 `cordis_run`
-   (可以直接对 agent 说:「把 `dsh-recall-plugin` 里的 `host.js` 和
-   `client.js` 定义成动态 Cordis 插件并运行」)。
-2. 首次运行需在 Cordis 面板批准(建议双勾授权,后续更新免批)。
-3. 刷新页面,发消息即可。
+```powershell
+# DSH 官方插件命令：安装并自动挂载进 web profile
+dsh plugin --profile web add dsh-recall-plugin@<version>
 
-> `host.js` / `client.js` 的内容就是 `cordis_define` 需要的**函数体**
-> (返回 Cordis Plugin 的那段代码),无需任何构建或转换。
+# 重启 DSH（本机示例）
+pm2 restart dsh-web
+```
+
+重启后硬刷新页面(Ctrl+Shift+R),插件永久生效,无需批准、无需每次重装。
+
+> 依赖的 DSH 包版本见 `peerDependencies`(与 DSH 0.1.0-rc.x 配套)。
 
 ## 使用
 
@@ -53,13 +58,24 @@ dsh-recall-plugin/
 
 ## 已知限制
 
-- **动态 Cordis 插件不跨 DSH 进程存活**:DSH 重启后需重新 define + run;
-  磁盘快照数据保留,重装后自动恢复索引。
 - 快照在**消息发送时**(agent 修改文件前)创建;插件启用前的历史消息没有快照,
   不显示撤回按钮。
 - 会话第一条用户消息无法回退对话(仅文件回退),因为 fork 需要更早的
   turn 边界。
 - 仅在 Windows + PowerShell 7 环境验证(依赖 git CLI 与 Expand-Archive)。
+
+## 开发(本地验证,无需发布)
+
+```powershell
+# 把包目录放进 web profile 的 node_modules，并登记到 bundles
+$pkg = 'D:\workspace\dsh-plugin\dsh-recall-plugin'
+$profile = "$env:USERPROFILE\.dsh\profiles\web"
+Copy-Item -Recurse -Force $pkg "$profile\node_modules\dsh-recall-plugin"
+# 手动编辑 $profile\package.json：
+#   dependencies 加 "dsh-recall-plugin": "1.0.0"
+#   dsh.profile.bundles 加 "dsh-recall-plugin"
+# 然后重启 DSH 并硬刷新页面
+```
 
 ## License
 

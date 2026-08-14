@@ -1,0 +1,11 @@
+# dsh-recall-plugin bundle patch
+#
+# 持久插件挂载层（dsh.bundle.patch）：安装后由 DSH CLI 的 bundle 协调
+# 自动把本包加进 profile 的 dsh.profile.bundles，启动时合并这一个
+# insert 行——无需手动编辑任何 profile 文件。
+#
+# 安装（发布到 npm 后）：
+#   dsh plugin --profile web add dsh-recall-plugin@<version>
+- insert:
+    - id: recall
+      name: 'dsh-recall-plugin'
