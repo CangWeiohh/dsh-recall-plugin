@@ -2,6 +2,7 @@
 
 > 撤回一条消息，项目文件也一起回去。
 
+![npm](https://img.shields.io/npm/v/dsh-recall-plugin?label=npm&color=cb3837)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-blue)
 ![DSH](https://img.shields.io/badge/DSH-0.1.0--rc-blue)
