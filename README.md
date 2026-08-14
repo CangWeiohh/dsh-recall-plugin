@@ -37,9 +37,9 @@
 
 ```powershell
 # DSH 官方插件命令：安装并自动挂载进 web profile
-dsh plugin --profile web add dsh-recall-plugin@<version>
-# 未发布时也可从 git 安装（纯 JS 无构建，免 prepare/allowBuilds）：
-# dsh plugin --profile web add github:<user>/dsh-recall-plugin
+dsh plugin --profile web add dsh-recall-plugin
+# 也可从 git 直接安装（纯 JS 无构建，免 prepare/allowBuilds）：
+# dsh plugin --profile web add github:limbo947/dsh-recall-plugin
 
 # 重启 DSH 进程（按你的启动方式，任选其一）
 dsh web                      # 前台直接启动
