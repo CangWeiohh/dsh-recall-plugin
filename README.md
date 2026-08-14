@@ -13,11 +13,11 @@
 
 ## 界面预览
 
-| 悬停出现撤回按钮 | 确认面板 · 变更文件清单 |
-| --- | --- |
-| ![悬停出现撤回按钮](docs/screenshots/recall-button.png) | ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) |
+![悬停出现撤回按钮](docs/screenshots/recall-button.png)
 
-![确认回退](docs/screenshots/confirm-panel-2.png)
+| 确认面板 · 变更文件清单 | 确认面板 |
+| --- | --- |
+| ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板](docs/screenshots/confirm-panel-2.png) |
 
 ## 功能亮点
 
