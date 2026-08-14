@@ -12,10 +12,12 @@
 这个插件把两者绑在一起：悬停任意一条你发过的消息，点「↶ 撤回」，**工作区文件和对话历史一起回到那条消息发出之前的状态**。
 
 ## 界面预览
+- 撤回按钮位置
 
 ![悬停出现撤回按钮](docs/screenshots/recall-button.png)
 
-| 确认面板 · 变更文件清单 | 确认面板 |
+---
+| 确认面板 · 变更文件清单| |
 | --- | --- |
 | ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板](docs/screenshots/confirm-panel-2.png) |
 
