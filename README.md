@@ -35,7 +35,7 @@
 
 - 快照在**消息发送时**创建，插件启用前的历史消息没有快照，不显示撤回按钮。
 - 会话第一条用户消息无法回退对话（仅文件回退），因为 fork 需要更早的 turn 边界。
-- 支持 Windows（PowerShell 5.1/7 + git CLI）与 Linux/macOS（bash + git CLI）；Windows 真机验证充分，POSIX 侧已按 DSH bash 执行器契约实现并经 Git Bash 语义验证，**尚未在真机 Linux/macOS 上实测**。
+- 支持 Windows（PowerShell 5.1/7 + git CLI）与 Linux/macOS（bash + git CLI）。Windows 真机验证充分；Linux 已在 WSL2（Ubuntu 26.04，bash 5.3 + git 2.53）实测全流程（含中文路径、home 降级、会话清理、gc）；macOS 侧脚本按 bash 3.2 兼容编写，尚未真机实测。
 - 工作区内嵌套的其他 git 仓库（子目录自带 `.git`）不进快照，其内容不参与回退。
 - 文件名含换行/TAB 的极端情形不在 diff 清单的解析能力内（概率可忽略）。
 
