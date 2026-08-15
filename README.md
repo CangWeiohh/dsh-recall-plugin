@@ -50,7 +50,7 @@ dsh plugin --profile web add dsh-recall-plugin
 ```
 - 也可从 git 直接安装（纯 JS 无构建，免 prepare/allowBuilds）：
 ```powershell
-dsh plugin --profile web add github:limbo947/DSH-recall-plugin
+dsh plugin --profile web add github:limbo947/dsh-recall-plugin
 ```
 - 重启 DSH 进程（按你的启动方式，任选其一）
 ```powershell
