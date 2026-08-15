@@ -2,6 +2,8 @@
 
 > 撤回一条消息，项目文件也一起回去。
 
+简体中文 | [English](README.en.md)
+
 ![npm](https://img.shields.io/npm/v/dsh-recall-plugin?label=npm&color=cb3837)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
