@@ -25,7 +25,7 @@
 
 - Settings page · quick exclusion editing (Settings → Plugins → Recall Settings)
 
-| Editing (quick add + one-click suggestions) | Saved |
+| Settings | Settings |
 | --- | --- |
 | ![Settings·editing](docs/screenshots/settings-exclude-1.png) | ![Settings·saved](docs/screenshots/settings-exclude-2.png) |
 
