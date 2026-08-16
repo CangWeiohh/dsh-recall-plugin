@@ -19,13 +19,13 @@
 ![悬停出现撤回按钮](docs/screenshots/recall-button.png)
 
 ---
-| 确认面板 · 变更文件清单| |
+| 确认面板 · 变更文件清单| 确认面板 · 变更文件清单|
 | --- | --- |
 | ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板](docs/screenshots/confirm-panel-2.png) |
 
 - 设置页 · 排除项快速编辑（设置 → 插件 → 撤回设置）
 
-| 编辑中（快速添加 + 常用模式一键追加） | 保存成功 |
+| 设置界面 | 设置界面 |
 | --- | --- |
 | ![设置页·编辑中](docs/screenshots/settings-exclude-1.png) | ![设置页·已保存](docs/screenshots/settings-exclude-2.png) |
 
