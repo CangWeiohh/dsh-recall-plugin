@@ -23,6 +23,12 @@
 | --- | --- |
 | ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板](docs/screenshots/confirm-panel-2.png) |
 
+- 设置页 · 排除项快速编辑（设置 → 插件 → 撤回设置）
+
+| 编辑中（快速添加 + 常用模式一键追加） | 保存成功 |
+| --- | --- |
+| ![设置页·编辑中](docs/screenshots/settings-exclude-1.png) | ![设置页·已保存](docs/screenshots/settings-exclude-2.png) |
+
 ## 功能亮点
 
 - **文件 + 对话，整段回退**：撤回的不只是聊天记录，agent 改过的文件也一并回到原样。
@@ -76,7 +82,7 @@ pm2 restart <你的dsh进程名>   # 若用 pm2 托管
 
 - **定期 gc**：每 50 条快照或距上次 gc 24 小时（先到先触发），后台执行 `git gc` 把 loose 对象压成 pack。无损操作——所有快照照常可回退。节流凭据写在影子仓库内的 `gc.stamp`，重启 DSH 不会重置周期。两个阈值可用环境变量覆盖（一般用不着）：`DSH_RECALL_GC_SNAPS`、`DSH_RECALL_GC_HOURS`。
 - **会话删除联动清理**：会话被彻底删除（会话日志从磁盘消失）后，下一次维护会自动删除该会话的全部快照并释放空间。**归档不算删除**——撤回功能自己归档的原会话日志仍在，快照保留、随时可从归档找回。判断很保守：会话只是冷着（不内存里）不会误清；无法核实日志状态时宁可不清。
-- **用户自定义排除**：在 home 下 `dsh-recall-snapshots/exclude.txt`（即 `$DSH_HOME/dsh-recall-snapshots/exclude.txt`，未设置时为 `~/.dsh/dsh-recall-snapshots/exclude.txt`；UTF-8）里一行一条 gitignore 风格 pattern（`#` 开头为注释），例如：
+- **用户自定义排除**：打开「**设置 → 插件 → 撤回设置**」即可可视化编辑快照排除项——输入路径或模式回车即加、常用模式（`dist/`、`*.log`、`.env` 等）一键追加、保存后下一次快照/回退立即生效，无需重启。也可以直接编辑 home 下 `dsh-recall-snapshots/exclude.txt`（即 `$DSH_HOME/dsh-recall-snapshots/exclude.txt`，未设置时为 `~/.dsh/dsh-recall-snapshots/exclude.txt`；UTF-8），一行一条 gitignore 风格 pattern（`#` 开头为注释），两种方式编辑的是同一份配置，例如：
 
   ```gitignore
   # 构建产物不进快照
@@ -85,7 +91,7 @@ pm2 restart <你的dsh进程名>   # 若用 pm2 托管
   *.log
   ```
 
-  对所有项目生效，下一次快照/回退立即应用，无需重启。新增排除只影响之后的快照；**回退到更早的快照时，当时尚未排除的文件仍会被恢复**（回到当时的状态，这正是回退语义）。想彻底清掉已进快照的目录，可手动删除 home 下 `dsh-recall-snapshots/` 里对应项目的哈希目录。
+  对所有项目生效（home 不可写而降级到项目内存储时，该工作区有独立的排除配置，设置页会分卡片列出）。新增排除只影响之后的快照；**回退到更早的快照时，当时尚未排除的文件仍会被恢复**（回到当时的状态，这正是回退语义）。想彻底清掉已进快照的目录，可手动删除 home 下 `dsh-recall-snapshots/` 里对应项目的哈希目录。设置页标签依赖 DSH 自带设置页（0.1.0-rc.x 均含）；极旧版本看不到该标签时，直接编辑文件等效。
 
 ## 工作原理
 

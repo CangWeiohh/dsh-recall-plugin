@@ -16,10 +16,10 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
 
 | 文件 | 职责 | 什么时候改它 |
 |---|---|---|
-| `lib/index.js` | Host 半入口：装配三个域模块、注册 `/api/recall/*` 四端点（init/snapshot-info/preview/execute）、接线 `session/event` 快照触发与启动预热 | 加 API 端点、改事件触发逻辑 |
-| `lib/client.js` | Client 半（浏览器）：抢注 `conversation.chat.node` user 渲染槽位（priority -1，冲突递减重试到 -3）、撤回按钮/确认面板/toast、调 fork + 归档 | 改 UI、改 fork 行为 |
-| `lib/store.js` | 执行与存储层：`runShell`（统一 `danger-full-access` 宿主身份 + UTF-8 prelude）、root/git 解析、home/降级 store 解析与迁移、`ensureGit` | 改存储布局、shell 执行策略 |
-| `lib/snapshots.js` | 快照域：capture/diff/rollback、index.json 落盘与载入、孤儿重建、`resolveCutSeq`（live 内存优先，冷会话走 sessionQuery，结果永久缓存） | 改快照/回退算法 |
+| `lib/index.js` | Host 半入口：装配三个域模块、注册 `/api/recall/*` 六端点（init/snapshot-info/preview/execute/exclude-get/exclude-set）、接线 `session/event` 快照触发与启动预热；`listExcludeFiles` 枚举全部 exclude.txt（注册表扫描 + home 容器磁盘兜底）并充当写入白名单 | 加 API 端点、改事件触发逻辑 |
+| `lib/client.js` | Client 半（浏览器）：抢注 `conversation.chat.node` user 渲染槽位（priority -1，冲突递减重试到 -3）、撤回按钮/确认面板/toast、调 fork + 归档；注册 `settings.plugins.tab` 的「撤回设置」标签页（exclude.txt 可视化快速编辑） | 改 UI、改 fork 行为 |
+| `lib/store.js` | 执行与存储层：`runShell`（统一 `danger-full-access` 宿主身份 + UTF-8 prelude）、root/git 解析、home/降级 store 解析与迁移、`resolveHomeContainer`（设置页兜底用）、`ensureGit` | 改存储布局、shell 执行策略 |
+| `lib/snapshots.js` | 快照域：capture/diff/rollback、index.json 落盘与载入、`readExclude`/`writeExclude`（设置页读写，平台分叉与 saveIndex 同构）、孤儿重建、`resolveCutSeq`（live 内存优先，冷会话走 sessionQuery，结果永久缓存） | 改快照/回退算法 |
 | `lib/maintenance.js` | 维护域：定期 `git gc`（每 50 拍或 24h，环境变量 `DSH_RECALL_GC_SNAPS/HOURS` 可调）、会话删除联动清 tag | 改磁盘治理策略 |
 | `lib/scripts.pwsh.js` | PowerShell 命令模板（win32） | 改 Windows 命令细节 |
 | `lib/scripts.posix.js` | bash 命令模板（linux/darwin），与 pwsh 版**同名导出** | 改 POSIX 命令细节 |
@@ -44,6 +44,8 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
   → git add -A（exclude.txt 排除 + 超大文件跳过）→ write-tree → commit-tree → tag
 点撤回 → preview（diff 当前 vs tag）→ 确认 → execute（文件回退）
   → resolveCutSeq（找 turn/end）→ client 调 sessions.fork → 原会话归档
+设置页 → exclude-get（枚举+读）→ 编辑 → exclude-set（白名单校验后写入）
+  → excludeSyncBlock 下一次快照/diff/回退时重读 exclude.txt 即时生效
 ```
 
 ## 存储布局
@@ -80,3 +82,6 @@ Copy-Item .\lib\* "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-recall-pl
 - fork 不传 `increaseTitle`（2026-08 修复）：否则撤回出的新会话标题变「xxx 2」且多次撤回递增。
 - `git init <dir>` 把真实 git-dir 建在 `<dir>/.git`——代码里 repo 与 git 是两个不同路径概念。
 - shell 子进程不继承主进程 `DSH_HOME`：POSIX 侧探测为空时回退 Node 主进程 env 再回退 `os.homedir()`。
+- 冷启动 `sessions.list()` 为空（惰性载入）：exclude 枚举不能只扫注册表，必须叠加 home 容器磁盘兜底（`resolveHomeContainer`，2026-08 修复），否则设置页误报「尚未创建快照存储」。
+- 手写 .ps1 测试文件必须带 BOM：Windows PowerShell 5.1 读无 BOM 脚本按 ANSI(GBK) 解析，中文路径直接乱码。插件真实链路（argv 直传 + UTF8_PRELUDE）不受影响，但任何落盘 .ps1 的调试脚本都要记得这一点。
+- `settings.plugins.tab` 是 root 级 list slot：id 唯一即无冲突（与 keyed slot 的 priority 冲突是两套语义），第三方插件用不进 settings namespace 白名单，配置读写走自有 HTTP 端点。

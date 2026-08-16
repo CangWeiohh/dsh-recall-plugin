@@ -23,6 +23,12 @@
 | --- | --- |
 | ![Confirmation panel · file change list](docs/screenshots/confirm-panel-1.png) | ![Confirmation panel](docs/screenshots/confirm-panel-2.png) |
 
+- Settings page · quick exclusion editing (Settings → Plugins → Recall Settings)
+
+| Editing (quick add + one-click suggestions) | Saved |
+| --- | --- |
+| ![Settings·editing](docs/screenshots/settings-exclude-1.png) | ![Settings·saved](docs/screenshots/settings-exclude-2.png) |
+
 ## Highlights
 
 - **Files + conversation, rolled back together**: recalling isn't just about chat history — files the agent modified go back to their original state too.
@@ -75,7 +81,7 @@ Snapshots are fully retained as long as "the session might still be recoverable"
 
 - **Periodic gc**: every 50 snapshots or 24 hours since the last gc (whichever comes first), `git gc` runs in the background to pack loose objects. This is lossless — every snapshot remains recallable. The throttle token lives in `gc.stamp` inside the shadow repository, so restarting DSH does not reset the cycle. Both thresholds can be overridden via environment variables (rarely needed): `DSH_RECALL_GC_SNAPS`, `DSH_RECALL_GC_HOURS`.
 - **Session-deletion cleanup**: once a session is permanently deleted (its log gone from disk), the next maintenance pass automatically removes all of its snapshots and frees the space. **Archiving is not deletion** — logs of sessions archived by the recall feature itself still exist, so their snapshots are kept and recoverable from the archive. The check is conservative: a session that is merely cold (not in memory) is never cleaned, and when the log's state cannot be verified, it is left alone.
-- **User-defined exclusions**: put one gitignore-style pattern per line in `dsh-recall-snapshots/exclude.txt` under home (i.e. `$DSH_HOME/dsh-recall-snapshots/exclude.txt`, or `~/.dsh/dsh-recall-snapshots/exclude.txt` when unset; UTF-8; lines starting with `#` are comments), for example:
+- **User-defined exclusions**: open "**Settings → Plugins → Recall Settings**" to edit snapshot exclusions visually — type a path or pattern and press Enter to add it, one-click append for common patterns (`dist/`, `*.log`, `.env`, …), and saved changes take effect on the very next snapshot/recall, no restart needed. Alternatively, edit `dsh-recall-snapshots/exclude.txt` under home directly (i.e. `$DSH_HOME/dsh-recall-snapshots/exclude.txt`, or `~/.dsh/dsh-recall-snapshots/exclude.txt` when unset; UTF-8; one gitignore-style pattern per line; lines starting with `#` are comments) — both paths edit the same configuration, for example:
 
   ```gitignore
   # keep build artifacts out of snapshots
@@ -84,7 +90,7 @@ Snapshots are fully retained as long as "the session might still be recoverable"
   *.log
   ```
 
-  This applies to all projects and takes effect on the next snapshot/recall, no restart needed. New exclusions only affect future snapshots; **when recalling to an earlier snapshot, files that weren't excluded at that time are still restored** (returning to the state as it was — that's exactly what recall means). To fully purge a directory that already made it into snapshots, manually delete the corresponding hash directory under `dsh-recall-snapshots/` in home.
+  This applies to all projects (when home is unwritable and a workspace falls back to in-project storage, it gets its own independent exclusion config, listed as a separate card in the settings tab). New exclusions only affect future snapshots; **when recalling to an earlier snapshot, files that weren't excluded at that time are still restored** (returning to the state as it was — that's exactly what recall means). To fully purge a directory that already made it into snapshots, manually delete the corresponding hash directory under `dsh-recall-snapshots/` in home. The settings tab requires DSH's built-in settings page (all 0.1.0-rc.x releases have it); on very old versions without the tab, editing the file directly is equivalent.
 
 ## How It Works
 
