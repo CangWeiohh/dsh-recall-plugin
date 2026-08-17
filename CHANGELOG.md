@@ -2,6 +2,39 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.4.0] - 2026-08-17
+
+### 新增
+
+- 官方插件配置机制：`cordis.patch.yml` 行声明默认值（`gcSnaps`/`gcHours`/`maxFileBytes`/`baseExcludes`），用户在 profile 的 `cordis.patch.yml` 按 `id: recall` 重述该行即可覆盖；`DSH_RECALL_GC_SNAPS/GC_HOURS` 环境变量保留为最高优先（向后兼容）。
+- 回退前自动保存安全快照（`snap-pre-rollback-<时间戳>` tag，不进列表），误回退后可从该 tag 找回，堵住唯一的不可逆操作缺口；确认面板文案同步说明。
+- 设置页「快照管理」卡片：快照列表（时间倒序，含工作区名/会话标题）、当前工作区磁盘占用、单条删除、「立即 gc」手动触发、最近错误展示（Host 侧失败原本只在宿主进程日志，页面不可见）。
+- 快照列表跨工作区名称解析：`saveIndex` 条目持久化 `root`；store 目录新增 `root.txt` 元数据（旧 store 重新解析时自动补写）；工作区 cwd 全集取「live 注册表 + `sessionQuery.listSessions` 冷元数据」并集（冷启动注册表为空也能解析）。
+- 快照管理性能优化：新增双平台 `storesDumpScript` 一条 shell 批量 dump 全部 store 元数据（旧实现每目录 2-3 条 shell 串行，冷列表 20 秒级）；列表 30 秒结果缓存（删除/新快照失效）；冷会话标题两段式——列表首屏只查 live/缓存（同步瞬时），冷标题（整日志解压 10 秒级）由客户端异步 `titles` 端点补齐、行内先显示「…」。实测冷列表 20s+ → 2.3s、缓存命中 8ms、删除 20s+ → 4.4s。
+- Host 新增 `manage`（list/usage/delete/gc）与 `status`（最近错误环形缓冲）端点；`preview`/`execute` 与快照/gc 共用同一条串行队列，消除 git index 锁并发竞态。
+- 变更清单截断保护：超过 500 条时面板显示「仅显示前 N 条」，总数仍准确；请求体 1MB 上限（`BODY_TOO_LARGE`）；启动时自检两套脚本模板的同名导出对齐。
+
+### 修复
+
+- 索引载入失败（如 shell 未就绪）后该工作区本次进程内被永久标记「已载入」、撤回按钮消失直到重启——改为读取链路全部走通后才标记，失败自然重试。
+- 快照列表「未知工作区」与同快照重复行：旧列表只查内存 `state.snapshots` 且去重 key 带 root——冷启动注册表为空时全部落空。修复后磁盘来源三层解析 root、去重只按消息 ID。
+- 管理页删除误报「该快照不存在」：列表来自磁盘全量而删除只查内存——修复为「内存 → 条目 root → 磁盘 index 反查（`locateSnapshotOnDisk`）」解析链；兜底删除前先 `loadIndex` 补齐内存视图，防止 `saveIndex` 用残缺内存覆盖 index.json 抹掉同 store 其余快照；`purgeSession` 对未缓存 root 现场解析 store（原先直接跳过导致该 root 清理永远 miss）。
+- 事件重放/重发产生重复 messageId 时 `git tag` 重名 fatal 导致整条快照失败——改 `tag -f`（同一条消息重快照取最新状态）。
+- A→B→A 切换会话后 A 复用 B 的 init promise——init 缓存改 `Map<会话, Promise>`。
+
+### 变更
+
+- 错误回包统一为 `{ok, code, message}`（业务失败与系统异常分离，文案与诊断解耦）。
+- `saveIndex`/`writeExclude` 的 win32 base64 分块与 POSIX stdin 分叉合并为统一落盘原语 `writeTextViaShell`；脚本导出 `indexWriteCmd`/`excludeWriteCmd` 合并为 `fileWriteCmd`。
+- `resolveHomeContainer` 改纯 JS 推导（容器 = home 目录父级），删除与 `homeDirScript` 重复的整条 `$h` shell 解析链（消除双链漂移风险）。
+- `maintenance.js` 导出面收敛为 `maybeMaintain`/`runGc`；删除 `index.json` 的死字段 `count`；删除未使用的非 scoped `cordis` peerDependency。
+- Host 端点分发重构为端点表 + 统一 try/catch；Client 侧 `kind` 语义（文案/徽章类名/汇总）合并为单表。
+
+### 兼容性
+
+- 全部改动经冒烟实测：临时中文+空格工作区上跑通真实 git 链路（建仓/快照/tag -f 幂等/diff 三类变更检出/回退恢复与删除/分块索引读写/tag 清理/gc/磁盘统计），Windows PowerShell 5.1 与 pwsh 7 双解释器通过。
+- 评估阶段曾将 win32 回退改为 bsdtar 优先，冒烟实测否决：GBK 代码页机器上 bsdtar 把 tar 流里的 UTF-8 文件名按 ANSI 解码（中文文件名解包成乱码新文件），已回滚为 zip + Expand-Archive 链路（中文路径实测正确，mtime 语义天然安全）。
+
 ## [1.3.0] - 2026-08-17
 
 ### 新增

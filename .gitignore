@@ -1,3 +1,5 @@
 node_modules/
 .dsh-recall-snapshots/
 *.log
+reference/
+.codebuddy/
