@@ -25,9 +25,7 @@
 
 - 设置页 · 排除项快速编辑（设置 → 插件 → 撤回设置）
 
-| 设置界面 | 设置界面 |
-| --- | --- |
-| ![设置页](docs/screenshots/settings-exclude-1.png) | ![设置页](docs/screenshots/settings-exclude-2.png) |
+ ![设置页](docs/screenshots/settings-exclude-2.png) 
 
 ## 功能亮点
 
