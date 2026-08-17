@@ -27,7 +27,7 @@
 
 | 设置界面 | 设置界面 |
 | --- | --- |
-| ![设置页·编辑中](docs/screenshots/settings-exclude-1.png) | ![设置页·已保存](docs/screenshots/settings-exclude-2.png) |
+| ![设置页](docs/screenshots/settings-exclude-1.png) | ![设置页](docs/screenshots/settings-exclude-2.png) |
 
 ## 功能亮点
 
