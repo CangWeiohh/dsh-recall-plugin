@@ -2,6 +2,13 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.4.1] - 2026-08-18
+
+### 修复
+
+- 撤回按钮不自动出现、需手动刷新：快照捕获（Host 侧脚本）是异步的，客户端在消息节点挂载时只查一次 `snapshot-info`，若先于捕获完成返回 `has:false` 则永不重试、按钮消失直到刷新。改为有界轮询（近 5 分钟内的新消息最多 20 次 × 1s，`has:true` 即渲染按钮），捕获完成后按钮自动出现。
+- 冷会话（未 live）根目录解析错误：`resolveRoot` 只认 live 会话，冷启动时回退到 `sandboxPolicy.workspaceRoot`（常为 harness 启动目录）导致查错 store、快照永远查不到。改为先经 `sessionQuery.listSessions`（廉价目录枚举）从持久化 header 解析真实 cwd；且只缓存 live/持久化来源的结果，回退的临时根不缓存，避免错误根遮蔽后续正确解析。
+
 ## [1.4.0] - 2026-08-17
 
 ### 新增
