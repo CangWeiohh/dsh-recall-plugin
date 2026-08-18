@@ -2,6 +2,12 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.4.2] - 2026-08-18
+
+### 变更
+
+- 设置入口从独立标签页「撤回设置」迁入官方「插件配置」分区：改用 `settings.plugin.item` keyed slot（按 namespace 分发），与 modlens 等第三方插件一致；Host 端 `index.js` 注册空 pass-through `dsh-recall` namespace 使 `settings.describe` 命中、卡片可被分发（真实配置仍走自有 `/api/recall/*` 端点，不经 settings 读写）。卡片改为折叠式（与官方内置卡片同款外观），展开后展示排除项编辑与快照管理。
+
 ## [1.4.1] - 2026-08-18
 
 ### 修复
