@@ -196,3 +196,37 @@ npm publish          # 需要 npm 登录（access: public）
 7. 用户要求迁移仓库 → 提交 1.5.0 → `mv` 到 `~/Personal.localized/develop/github/` →
    更新 profile link 路径 → `pnpm install` → 验证软链/版本/组合正常。
 8. 写本记录文档。
+
+---
+
+## 9. 会话迁移到 DSH 工作区（新会话 / 非插件代码改动）
+
+> 本节记录的是「把当前 DSH 会话迁移到另一个工作区」这件事，属于 DSH 数据操作，
+> 与插件代码无关，但为保持会话记录完整而补记于此。
+
+### 9.1 背景
+- 用户计划销毁 `~/Downloads/20260818-dsh`（会话工作目录）。
+- 用户希望把当前会话（`session-48a3a521-8b06-4b96-9789-5a51f88a9356`，标题「撤回按钮自动加载问题」）
+  迁到另一个工作区，目标 `/Users/cangwei/Personal.localized/develop/DSH`。
+
+### 9.2 关键结论（调研 DSH 存储模型）
+- 会话数据不在工作目录里，而在 `~/Library/Application Support/dsh-desktop/harness/`：
+  - 会话日志：`harness/sessions/<projectKey(cwd)>/<sessionId>/session.jsonl.zstd`（多帧 zstd，第 0 帧是 header，含 `cwd`）
+  - 工作区注册表：`harness/storages/workspace.json`（`workspaceIds` + `tables.workspaces.<id>.sessionIds`）
+  - 会话投影缓存：`harness/storages/session_projcache.json`（`tables.sessions.<id>.identity.cwd`）
+  - 召回快照：`harness/dsh-recall-snapshots/sha256(root)/`（root = 会话 cwd；含 index.json / root.txt / git 库）
+- 工作区归属由会话头部 `cwd` 决定：`realpath(cwd) === 工作区路径` 才纳入成员（`dsh-workspace` 源码）。
+- 官方 RPC 没有「移动会话到工作区」功能，只能离线手工迁移。
+
+### 9.3 迁移脚本（已写好并验证，离线运行）
+- 脚本：`/Users/cangwei/Personal.localized/develop/DSH/migrate-session-to-DSH.sh`
+- 说明文档：`/Users/cangwei/Personal.localized/develop/DSH/迁移会话到DSH-README.md`
+- 做法：退出 DSH → 跑脚本（先备份）→ 重开 DSH → 会话出现在「DSH」工作区。
+- 迁移内容：改日志 header `cwd`、移动会话目录到 `--Users-cangwei-Personal.localized-develop-DSH--/`、
+  更新 workspace.json 归属、更新 projcache `identity.cwd`、召回快照 `3baeb0a...` → `f41a4e88...`（sha256 新 root）并过滤 index。
+- 已在沙箱完整验证：内容逐事件等价、seq 连续、JSON 合法、幂等/防运行中误执行。
+
+### 9.4 验证数据（沙箱测试）
+- 原文件 4631/5036/5355 帧（随会话持续增长），迁移后事件数完全一致，`decodeStorageRecord` 逐事件无缺口。
+- workspace.json：DSH 工作区 sessionIds 含 `48a3a521`，旧工作区 13 条。
+- 召回新 store 4 条（仅本会话）、旧 store 35 条（已移除本会话条目）。
