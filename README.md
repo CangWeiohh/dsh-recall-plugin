@@ -124,3 +124,7 @@ Copy-Item -Recurse -Force $pkg "$profile\node_modules\dsh-recall-plugin"
 ## License
 
 MIT
+
+---
+
+[更新日志](CHANGELOG.md)
