@@ -29,6 +29,10 @@
 | --- | --- |
 | ![Settings·editing](docs/screenshots/settings-exclude-1.png) | ![Settings·saved](docs/screenshots/settings-exclude-2.png) |
 
+- Settings page · Snapshot Manager (tree: workspace → session → snapshot, leaves show message content)
+
+> Tree-view snapshot manager screenshot to be added later (the feature is already implemented in the current version).
+
 ## Highlights
 
 - **Files + conversation, rolled back together**: recalling isn't just about chat history — files the agent modified go back to their original state too.
@@ -38,6 +42,7 @@
 - **See the list before you act**: clicking recall first shows the list of files that will change (modified / restored / deleted); nothing is overwritten until you confirm.
 - **Disk-friendly**: snapshots use git delta compression — incremental, not full-directory copies. Files larger than 100MB are skipped automatically.
 - **Automatic housekeeping**: periodic `git gc` packs loose objects (lossless — not a single snapshot is lost); snapshots of deleted sessions are cleaned up automatically; build artifacts can be excluded globally via `exclude.txt` (see below).
+- **Tree-view snapshot manager**: the "Snapshot Manager" on the settings page shows a **workspace → session → snapshot** three-level tree with expand/collapse support; each level has a delete button on its right, so you can clear all snapshots of a workspace or a session at once. Leaves show a summary of the message content the snapshot corresponds to, making it easy to locate "what this message changed back then".
 
 ## Known Limitations
 
@@ -91,6 +96,7 @@ Snapshots are fully retained as long as "the session might still be recoverable"
   ```
 
   This applies to all projects (when home is unwritable and a workspace falls back to in-project storage, it gets its own independent exclusion config, listed as a separate card in the settings tab). New exclusions only affect future snapshots; **when recalling to an earlier snapshot, files that weren't excluded at that time are still restored** (returning to the state as it was — that's exactly what recall means). To fully purge a directory that already made it into snapshots, manually delete the corresponding hash directory under `dsh-recall-snapshots/` in home. The settings tab requires DSH's built-in settings page (all 0.1.0-rc.x releases have it); on very old versions without the tab, editing the file directly is equivalent.
+- **Tree-view snapshot manager**: open "**Settings → Plugins → Recall Settings → Snapshot Manager**" to see the tree list — first level workspace (folder name), second level session (session title), third level snapshot (time + message content summary, hover to see the full content). Workspace and session nodes support expand/collapse; every level has a delete button on its right, with an inline confirmation before deletion. Deleting a workspace = clearing all snapshots of that workspace; deleting a session = clearing all snapshots of that session within that workspace; deleting a leaf = removing just that single snapshot.
 
 ## How It Works
 
@@ -122,3 +128,7 @@ Copy-Item -Recurse -Force $pkg "$profile\node_modules\dsh-recall-plugin"
 ## License
 
 MIT
+
+---
+
+[Changelog](CHANGELOG.md)
