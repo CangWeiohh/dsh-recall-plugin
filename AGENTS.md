@@ -16,8 +16,8 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
 
 | 文件 | 职责 | 什么时候改它 |
 |---|---|---|
-| `lib/index.js` | Host 半入口：装配三个域模块、注册 `/api/recall/*` 六端点（init/snapshot-info/preview/execute/exclude-get/exclude-set）、接线 `session/event` 快照触发与启动预热；`listExcludeFiles` 枚举全部 exclude.txt（注册表扫描 + home 容器磁盘兜底）并充当写入白名单 | 加 API 端点、改事件触发逻辑 |
-| `lib/client.js` | Client 半（浏览器）：抢注 `conversation.chat.node` user 渲染槽位（priority -1，冲突递减重试到 -3）、撤回按钮/确认面板/toast、调 fork + 归档；注册 `settings.plugins.tab` 的「撤回设置」标签页（exclude.txt 可视化快速编辑） | 改 UI、改 fork 行为 |
+| `lib/index.js` | Host 半入口：装配三个域模块、注册 `/api/recall/*` 端点（init/snapshot-info/preview/execute/exclude-get/exclude-set/manage/status/messages）、接线 `session/event` 快照触发与启动预热；`listExcludeFiles` 枚举全部 exclude.txt（注册表扫描 + home 容器磁盘兜底）并充当写入白名单；`manage` 支持树形管理的 workspace/session 批量删除与 list/usage/gc，`messages` 异步补冷会话消息文本 | 加 API 端点、改事件触发逻辑 |
+| `lib/client.js` | Client 半（浏览器）：抢注 `conversation.chat.node` user 渲染槽位（priority -1，冲突递减重试到 -3）、撤回按钮/确认面板/toast、调 fork + 归档；注册 `settings.plugins.tab` 的「撤回设置」标签页（exclude.txt 可视化快速编辑 + 快照管理树形卡片：工作区→会话→快照，三级展开/折叠与删除，叶子显示消息内容摘要） | 改 UI、改 fork 行为 |
 | `lib/store.js` | 执行与存储层：`runShell`（统一 `danger-full-access` 宿主身份 + UTF-8 prelude）、root/git 解析、home/降级 store 解析与迁移、`resolveHomeContainer`（设置页兜底用）、`ensureGit` | 改存储布局、shell 执行策略 |
 | `lib/snapshots.js` | 快照域：capture/diff/rollback、index.json 落盘与载入、`readExclude`/`writeExclude`（设置页读写，平台分叉与 saveIndex 同构）、孤儿重建、`resolveCutSeq`（live 内存优先，冷会话走 sessionQuery，结果永久缓存） | 改快照/回退算法 |
 | `lib/maintenance.js` | 维护域：定期 `git gc`（每 50 拍或 24h，环境变量 `DSH_RECALL_GC_SNAPS/HOURS` 可调）、会话删除联动清 tag | 改磁盘治理策略 |
@@ -46,6 +46,9 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
   → resolveCutSeq（找 turn/end）→ client 调 sessions.fork → 原会话归档
 设置页 → exclude-get（枚举+读）→ 编辑 → exclude-set（白名单校验后写入）
   → excludeSyncBlock 下一次快照/diff/回退时重读 exclude.txt 即时生效
+设置页快照管理 → manage list（磁盘 dump + 内存并集，30s 缓存）
+  → 树形分组（工作区→会话→快照）→ titles/messages 异步补冷会话标题/消息文本
+  → 删除（scope=workspace/session/snapshot）→ purgeTags 分块 + saveIndex
 ```
 
 ## 存储布局
@@ -56,7 +59,7 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
 └── <工作区路径SHA256>/
     ├── git/                       # 影子仓库工作目录（空，仅持有 .git）
     │   └── .git/                  # 真实 git-dir（config/info/objects…）
-    └── index.json                 # [{id,time,count,sessionId}] 快照索引
+    └── index.json                 # [{id,time,root,sessionId}] 快照索引
 ```
 
 降级时（home 不可写）：以上结构整体落到 `<项目>/.dsh-recall-snapshots/`，exclude.txt 移入 store 目录内部。
@@ -70,7 +73,7 @@ Copy-Item .\lib\* "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-recall-pl
 # 发布流程：bump package.json version → git commit/push → npm publish → GitHub Release
 ```
 
-- 冒烟路径：中文路径工作区 → 发消息（出快照）→ 改文件 → 撤回（确认面板清单正确、文件恢复、对话回退、标题不变）。
+- 冒烟路径：中文路径工作区 → 发消息（出快照）→ 改文件 → 撤回（确认面板清单正确、文件恢复、对话回退、标题不变）→ 设置页快照管理（树形展开/折叠、叶子消息内容显示、三级删除与批量删除、立即 gc）。
 - 回归注意点：每次动 scripts.*.js 必须两个平台过一遍心智检查（路径引号、编码、命令长度上限差异）。
 - 版本规范：修复 bump patch，新功能 bump minor；metadata-only 可不发 GitHub Release。
 
@@ -83,5 +86,8 @@ Copy-Item .\lib\* "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-recall-pl
 - `git init <dir>` 把真实 git-dir 建在 `<dir>/.git`——代码里 repo 与 git 是两个不同路径概念。
 - shell 子进程不继承主进程 `DSH_HOME`：POSIX 侧探测为空时回退 Node 主进程 env 再回退 `os.homedir()`。
 - 冷启动 `sessions.list()` 为空（惰性载入）：exclude 枚举不能只扫注册表，必须叠加 home 容器磁盘兜底（`resolveHomeContainer`，2026-08 修复），否则设置页误报「尚未创建快照存储」。
+- 树形管理 `manage list` 同 id 去重时不能“首次命中即丢弃”：磁盘先占位、内存后补全 root，必须做字段补全，否则工作区节点落入「未知工作区」且批量删除匹配不到。
+- 批量删除 tag 要分块（每 100 个）：win32 命令行 32767 字符上限，长历史工作区整批传会爆；与 `maintenance.purgeSession` 保持一致。
+- 消息文本展示是“两段式”补全：`manage list` 只带 live 命中值，冷会话由客户端异步调 `messages` 端点补齐；`messageTexts` 缓存 null 也要落缓存，否则无文本消息每次刷新都重复解压冷日志。
 - 手写 .ps1 测试文件必须带 BOM：Windows PowerShell 5.1 读无 BOM 脚本按 ANSI(GBK) 解析，中文路径直接乱码。插件真实链路（argv 直传 + UTF8_PRELUDE）不受影响，但任何落盘 .ps1 的调试脚本都要记得这一点。
 - `settings.plugins.tab` 是 root 级 list slot：id 唯一即无冲突（与 keyed slot 的 priority 冲突是两套语义），第三方插件用不进 settings namespace 白名单，配置读写走自有 HTTP 端点。
