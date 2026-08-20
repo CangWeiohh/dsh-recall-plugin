@@ -2,6 +2,19 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.5.1] - 2026-08-18
+
+### 修复
+
+- 设置页冷启动优化：`exclude-get` 首次遍历工作区、逐文件 shell 读改为并行 + 30s 结果缓存（保存后失效），二次打开设置页不再重复付出首访代价。
+- 冷会话标题/消息文本补齐引入通用并发限制器（`runLimited`，同时最多 4 个）：首次大量冷数据时 `readSession` 整日志解压不再全量并发压垮磁盘/CPU。
+- 启动预热叠加 `sessionQuery.listSessions()` 冷元数据：冷启动时 `ctx.sessions.list()` 常为空（惰性载入），此前设置页首次打开仍要现场建 store，现开机即预热全部历史工作区。
+- Client 侧 `usage`/`status` 补数据延后到 `list` 返回后异步执行：首屏先渲染树形内容，磁盘占用与错误日志随后补齐；`list` 失败时仍尝试补这两个数据，避免整卡全空。
+
+### 变更
+
+- Client 侧 `titles` 请求的 sessionIds 去重（`Set` 去重 + 过滤空值）。
+
 ## [1.5.0] - 2026-08-18
 
 ### 新增
