@@ -13,6 +13,7 @@
 
 ### 变更
 
+- 设置卡片默认收起、点卡片头展开，视觉规格对齐官方 PluginCard（bg-layer 底色、展开态边框/背景变化、标题 15px/600、内容区上边框分隔、箭头 14px 居右）。
 - 快照管理的磁盘占用与「立即 gc」全局化：设置卡片无会话上下文，`usage` 汇总全部已知 store、`gc` 逐 store 执行（新增 `maintenance.runGcAll`）；带 sessionId 的旧调用语义保持不变。
 - 配置热更新贯通：`gcSnaps/gcHours/maxFileBytes/baseExcludes` 改为调用时读取（原工厂创建时快照），settings 卡片保存后下一次快照/gc 即按新值执行，无需重启。
 - `package.json` 新增 peerDependencies：`@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery`。
