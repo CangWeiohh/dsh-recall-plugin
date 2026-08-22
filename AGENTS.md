@@ -69,10 +69,20 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
 ## 开发与验证
 
 ```powershell
-# 本地源码 → 已安装实例（改完即时生效需重启 dsh-web，Host 半变了光刷页面不够）
-Copy-Item .\lib\* "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-recall-plugin\lib\" -Force
+# 本地开发环境（一次性，已配置）：
+# - profile（~/.dsh/profiles/web/package.json）的依赖是 link:<本仓库>——
+#   工作区 lib/ 即已安装代码，改完重启 dsh-web 生效，无需复制；市场/pnpm
+#   更新对 link: 依赖永不覆盖。
+# - 工作区 node_modules/@deepseek-ai/{schemastery,dsh-settings} 是指向
+#   dsh 安装目录的 junction：Host 侧直接 import 这两个包，ESM 按真实路径
+#   解析（link: 下即工作区），工作区必须本地可寻。注意 dsh-settings
+#   0.1.1-rc.2 未发布公共 npm（registry 只有 0.0.1-rc.1），只能从 dsh
+#   安装目录链接。junction 丢失（如换机/删 node_modules）时重建：
+#   cmd /c mklink /J node_modules\@deepseek-ai\schemastery "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\schemastery"
+#   cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-settings"
 
 # 发布流程：bump package.json version → git commit/push → npm publish → GitHub Release
+# 发布后若要改回跟随 npm 版本：profile 依赖改 "^<ver>" 后 pnpm install
 ```
 
 - 冒烟路径：中文路径工作区 → 发消息（出快照）→ 改文件 → 撤回（确认面板清单正确、文件恢复、对话回退、标题不变）→ 设置页快照管理（树形展开/折叠、叶子消息内容显示、三级删除与批量删除、立即 gc）。
@@ -94,4 +104,4 @@ Copy-Item .\lib\* "$env:USERPROFILE\.dsh\profiles\web\node_modules\dsh-recall-pl
 - 手写 .ps1 测试文件必须带 BOM：Windows PowerShell 5.1 读无 BOM 脚本按 ANSI(GBK) 解析，中文路径直接乱码。插件真实链路（argv 直传 + UTF8_PRELUDE）不受影响，但任何落盘 .ps1 的调试脚本都要记得这一点。
 - `settings.plugin.item` 是 keyed slot 且按 **namespace 交集**分发：卡片 key 必须与 Host 端 settings namespace（`dsh-recall`，经官方 `installSettingsSection` 注册真 Config schema）一致，Host 未注册 namespace 时卡片永不渲染。各 namespace 独占自己的 key，无同 key 抢占，不需要 priority（与 `conversation.chat.node` 覆盖默认渲染器的 priority 冲突是两套语义）。
 - `sessionQuery.listSessions()` 的记录形如 `{header, live, persisted}`，会话 id 在 `header.id`，顶层没有 id 字段——误读 `record.id` 恒得 undefined（1.5.2 修过预热路径这个坑）。
-- Host 侧 import 的 `@deepseek-ai/*` 包从 dsh 安装目录解析（profile 树里没有）：新增 peerDependencies（如 `dsh-settings`、`schemastery`）无需往 profile 手装，dsh 自带。
+- Host 侧 import 的 `@deepseek-ai/*` 包按**模块真实路径**解析：npm/git 安装的真实路径在 profile 树内（hoisted 平铺可寻）；**link: 开发安装的真实路径是工作区**，工作区必须自备 junction（见「开发与验证」）。另注意 ESM 没有 CJS 的全局 node_modules 回退——用 `require.resolve` 验证可解析会误判（1.6.0 踩过：启动失败 ERR_MODULE_NOT_FOUND）。
