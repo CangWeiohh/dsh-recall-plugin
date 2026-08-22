@@ -16,4 +16,5 @@
         gcSnaps: 50            # 每积累多少条快照触发一次 git gc
         gcHours: 24            # 距上次 gc 超过多少小时触发（与条数先到先触发）
         maxFileBytes: 104857600  # 超过该大小的文件不进快照、不被回退触碰
+        refillDraft: true      # 撤回后把被撤回的消息文本回填到输入框
         # baseExcludes: ['.git', 'node_modules/', '.dsh-recall-snapshots/']  # 基础排除表（gitignore 语法）

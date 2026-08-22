@@ -2,6 +2,21 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.6.0] - 2026-08-22
+
+### 新增
+
+- 撤回后自动把被撤回的消息文本回填到输入框（方案取自 [#4](https://github.com/limbo947/dsh-recall-plugin/pull/4)，按主干结构重写）：走官方 `conversation` 服务的 `input.shell(id).actions.setDraft`（与输入框自身同一写入通道，draft 镜像同步），对话回退成功时填入新会话、回退失败时填入当前会话；8 次 × 150ms 有界重试覆盖 fork+open 后 shell 就绪竞态，拿不到服务时静默跳过。新增配置开关 `refillDraft`（默认开）。
+- 设置入口迁入官方「插件配置」分区（[#2](https://github.com/limbo947/dsh-recall-plugin/issues/2)）：改用 `settings.plugin.item` keyed slot（按 namespace `dsh-recall` 分发），Host 端经官方 `installSettingsSection` 注册真 schema 的 settings namespace——`settings.describe` 命中后卡片出现。卡片内含插件配置表单（保存经 `dsh-settings` 持久化进用户层、watch 链路热生效无需重启）+ 排除配置编辑（折叠）+ 快照管理（折叠）。原「撤回设置」独立标签页移除。
+- 导出 Schemastery `Config` schema（官方「插件配置」文档要求）：cordis 加载时校验入口配置并填充默认值，非法配置在插件加载时响亮失败；同时作为 settings namespace 的注册 schema，一式两用。
+- 设置卡片「插件配置」表单：gc 触发条数/小时、文件大小上限、基础排除表、回填开关五个字段；显示「已覆盖」（用户层覆盖）与「环境变量锁定」（`DSH_RECALL_GC_SNAPS/GC_HOURS` 仍最高优先）标记；只提交修改过的字段，避免全量覆盖污染用户层。
+
+### 变更
+
+- 快照管理的磁盘占用与「立即 gc」全局化：设置卡片无会话上下文，`usage` 汇总全部已知 store、`gc` 逐 store 执行（新增 `maintenance.runGcAll`）；带 sessionId 的旧调用语义保持不变。
+- 配置热更新贯通：`gcSnaps/gcHours/maxFileBytes/baseExcludes` 改为调用时读取（原工厂创建时快照），settings 卡片保存后下一次快照/gc 即按新值执行，无需重启。
+- `package.json` 新增 peerDependencies：`@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery`。
+
 ## [1.5.2] - 2026-08-22
 
 ### 修复
