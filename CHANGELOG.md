@@ -2,6 +2,15 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.5.2] - 2026-08-22
+
+### 修复
+
+- 撤回按钮不自动出现、需手动刷新（[#3](https://github.com/limbo947/dsh-recall-plugin/issues/3)，修复方案取自 [#4](https://github.com/limbo947/dsh-recall-plugin/pull/4) 并按主干结构重写）：两处根因分别修复——
+  - 快照捕获是异步的，客户端在消息节点挂载时只查一次 `snapshot-info`，先于捕获完成返回 `has:false` 则永不重试。改为有界轮询：近 5 分钟内的新消息最多 20 次 × 1s，`has:true` 即渲染按钮，捕获完成后自动出现；老消息不再空转请求。
+  - 冷会话（未 live）根目录解析错误：`resolveRoot` 只认 live 注册表，冷启动时回退 `sandboxPolicy.workspaceRoot`（常为 harness 启动目录）导致查错 store，且错误根被永久缓存。改为先经 `sessionQuery.listSessions` 从持久化 header 解析真实 cwd；只有 live/持久化来源的权威结果才进缓存，回退的临时根不缓存。
+- 启动预热读冷会话元数据时会话 id 误取 `record.id`（`listSessions` 记录的 id 在 `header.id`，顶层恒 undefined）：预热重建的孤儿快照 sessionId 记为空，树形管理里落入「已删除会话」节点。改读 `record.header.id`。
+
 ## [1.5.1] - 2026-08-18
 
 ### 修复
