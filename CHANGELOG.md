@@ -2,11 +2,11 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
-## [Unreleased]
+## [1.6.1] - 2026-08-23
 
 ### 新增
 
-- 快照管理新增带二次确认的「全部删除」按钮：一次清理所有工作区的快照。
+- 快照管理新增带二次确认的「全部删除」按钮：一次清理所有工作区的快照（[PR #5](https://github.com/limbo947/dsh-recall-plugin/pull/5)，@CangWeiohh 贡献）。
 
 ### 修复
 
