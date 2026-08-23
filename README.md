@@ -12,8 +12,11 @@
 
 ---
 **在任意一条你发过的消息下方**，**点「↶ 撤回」**，**工作区文件和对话历史一起回到那条消息发出之前的状态**。
+---
 
+[更新日志](CHANGELOG.md)
 ## 界面预览
+
 - 撤回按钮位置
 
 ![悬停出现撤回按钮](docs/screenshots/recall-button.png)
@@ -126,6 +129,4 @@ Copy-Item -Recurse -Force $pkg "$profile\node_modules\dsh-recall-plugin"
 
 MIT
 
----
 
-[更新日志](CHANGELOG.md)
