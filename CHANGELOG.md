@@ -10,6 +10,7 @@
 
 ### 修复
 
+- 默认基础排除表补上 `dsh-recall-snapshots/`（home 存储目录名，无前导点）：工作区 root 恰为 HOME 时（如容器内 root=/root），home 存储落入工作区且不被旧默认 `.dsh-recall-snapshots/` 匹配，`git add -A` 把影子仓库自己吞进去导致快照全部失败、撤回按钮永不出现（[#6](https://github.com/limbo947/dsh-recall-plugin/issues/6)）。排除表在下一次快照/回退时重同步并清理已误跟踪条目，存量坏索引自愈；曾在设置卡片改过基础排除表的用户需手动补一行 `dsh-recall-snapshots/`。
 - 全部删除直接枚举每个影子仓库的真实 `snap-*` git tag，而非仅依赖可能丢失或过期的 `index.json`；tag 每 100 个分批删除并回读校验，确认成功后才清空索引。即使 `index.json` 为空、`root.txt` 缺失或列表未显示残留快照，仍可清理。
 - 仅创建但未初始化 git 的空 store 视为无快照，不会阻断其他 store 的全部删除；任一 store 删除失败会保留其索引并在页面显示可重试错误。
 
