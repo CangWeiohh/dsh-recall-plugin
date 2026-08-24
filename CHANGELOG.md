@@ -2,6 +2,15 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.6.2] - 2026-08-25
+
+### 修复
+
+- 用户消息图片显示空白且刷新无效（[#8](https://github.com/limbo947/dsh-recall-plugin/issues/8)）：会话回放时最早的图片消息先于会话 binding 就绪渲染，`loadImage` 以 unknown session 拒绝后被静默 `catch` 吞掉，图片永久空白。图片加载改为 400ms/1.5s/4s 三次退避自动重试（暂态失败自愈），耗尽后显示「图片加载失败，点击重试」失败态（对齐官方 MessageImage 语义）；顺带修复 attachment 切换时短暂残留上一张图的问题。
+- 快照连续失败无限累积磁盘残骸（[#7](https://github.com/limbo947/dsh-recall-plugin/issues/7) 评论实测一个下午 127GB dangling 对象）：失败重试的每次 `git add` 都会写入无 tag 可达的残骸对象。两道防线——
+  - **失败清理**：每次快照失败后执行 `git prune`（以 refs + 暂存 index 为根做可达性删除），只清当次残骸、不碰任何 tag 快照，已暂存对象保留以维持下次增量。
+  - **熔断退避**：连续 3 次失败后按 5min 起步指数翻倍、60min 封顶的退避跳过快照，冷却期满自动重试，成功一次即全部复位；进入熔断只在跳变沿记一条最近错误。
+
 ## [1.6.1] - 2026-08-23
 
 ### 新增
