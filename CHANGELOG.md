@@ -2,6 +2,18 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.7.0] - 2026-08-25
+
+### 新增
+
+- 快照失败/跳过可见性（[#7](https://github.com/limbo947/dsh-recall-plugin/issues/7) 加固项 1）：快照失败或熔断时客户端 toast 提示（同一故障文本 10 分钟节流，避免持续故障期间刷屏），轮询到失败即终止、不再空等 20 次；熔断期间的新消息会收到「已暂停，N 分钟后自动重试」提示而非沉默。「按钮为什么消失了」的排障成本由此消掉。
+- `git add --ignore-errors` fail-open 兜底（[#7](https://github.com/limbo947/dsh-recall-plugin/issues/7) 加固项 3）：无法索引的路径（无提交的嵌入式仓库、不可读文件等）以退出码 1 结束但索引照常落盘——快照缺个别路径可接受，好过整条快照 fatal。被跳过的路径以 SNAP_SKIP 行回传，客户端提示「快照已跳过未纳入的路径」（这些路径撤回时既不恢复也不会被删，与排除表语义一致）。
+- 失败后孤儿进程清扫 + stale 锁清理（[#7](https://github.com/limbo947/dsh-recall-plugin/issues/7) 加固项 4）：runShell 失败路径按 `--git-dir=<本仓库>` 命令行标记定位漏网孤儿进程并终止（win: `taskkill /T /F`，POSIX: `pgrep`+`kill`），随后清理 index.lock 等残留锁——DSH subprocess 服务的树级终止有竞态窗口，且 git 被硬杀不做锁回收，残留的 index.lock 会让后续每条快照持续 fatal。
+
+### 修复
+
+- `git add` fatal 时脚本假成功（空树快照）：pwsh 对原生命令非零退出不抛错（ErrorActionPreference 不作用于 native），此前 add fatal 后脚本会带着未更新的旧索引继续走完 write-tree/commit/tag，产出空树 tag 且退出码 0——快照「成功」却什么都回退不了。现显式检查退出码（≥2 抛错终止），diff/rollback 的同款 add 一并修复。
+
 ## [1.6.2] - 2026-08-25
 
 ### 修复
