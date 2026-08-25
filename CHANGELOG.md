@@ -2,6 +2,12 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [1.7.1] - 2026-08-25
+
+### 修复
+
+- 历史会话中用户消息图片从未渲染（[#9](https://github.com/limbo947/dsh-recall-plugin/issues/9)）：插件渲染器读取的 `props.loadImage` 在官方 `conversation.chat.node` slot 契约中**从不存在**（实际入口是 `props.renderMessageImages`），自研加载链在守卫处直接 return——v1.6.2 的重试链、v1.7.0 的失败按钮全部从未执行，图片永久无声空白（v1.6.2/#8 的修复因此「修了却无效」）。用户消息图片改走官方 `renderMessageImages` 管线（自带鉴权、缓存、失败重试与灯箱预览），布局对齐官方（图片在上、气泡在下）；自研 `ImageBox`/`useImageSrc` 及对应 CSS 作为死代码移除。
+
 ## [1.7.0] - 2026-08-25
 
 ### 新增

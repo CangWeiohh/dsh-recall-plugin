@@ -17,7 +17,7 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
 | 文件 | 职责 | 什么时候改它 |
 |---|---|---|
 | `lib/index.js` | Host 半入口：装配三个域模块、注册 `/api/recall/*` 端点（init/snapshot-info/preview/execute/exclude-get/exclude-set/config-get/config-set/manage/status/messages）、`installSettingsSection` 挂 settings namespace `dsh-recall`（真 Config schema，watch 热更新 cfg）、接线 `session/event` 快照触发与启动预热；`listExcludeFiles` 枚举全部 exclude.txt（注册表扫描 + home 容器磁盘兜底）并充当写入白名单；`manage` 支持树形管理的 workspace/session 批量删除与 list/usage/gc（usage/gc 无 sessionId 时全局化），`messages` 异步补冷会话消息文本 | 加 API 端点、改事件触发逻辑 |
-| `lib/client.js` | Client 半（浏览器）：抢注 `conversation.chat.node` user 渲染槽位（priority -1，冲突递减重试到 -3）、撤回按钮/确认面板/toast、调 fork + 归档、撤回成功后回填消息文本到输入框（官方 `conversation.input` 通道，`refillDraft` 可关）；注册 `settings.plugin.item` 的「撤回插件」卡片（key=namespace `dsh-recall`：插件配置表单经 settings 用户层读写、exclude.txt 可视化快速编辑、快照管理树形卡片：工作区→会话→快照，三级展开/折叠与删除，叶子显示消息内容摘要） | 改 UI、改 fork 行为 |
+| `lib/client.js` | Client 半（浏览器）：抢注 `conversation.chat.node` user 渲染槽位（priority -1，冲突递减重试到 -3）、撤回按钮/确认面板/toast、调 fork + 归档、撤回成功后回填消息文本到输入框（官方 `conversation.input` 通道，`refillDraft` 可关）；用户消息图片经官方 `props.renderMessageImages` 渲染（不自研加载链）；注册 `settings.plugin.item` 的「撤回插件」卡片（key=namespace `dsh-recall`：插件配置表单经 settings 用户层读写、exclude.txt 可视化快速编辑、快照管理树形卡片：工作区→会话→快照，三级展开/折叠与删除，叶子显示消息内容摘要） | 改 UI、改 fork 行为 |
 | `lib/store.js` | 执行与存储层：`runShell`（统一 `danger-full-access` 宿主身份 + UTF-8 prelude + 失败兜底：按 `$g` 提取 git-dir 做孤儿清扫/清 stale 锁）、root/git 解析、home/降级 store 解析与迁移、`resolveHomeContainer`（设置页兜底用）、`ensureGit` | 改存储布局、shell 执行策略 |
 | `lib/snapshots.js` | 快照域：capture/diff/rollback、index.json 落盘与载入、`readExclude`/`writeExclude`（设置页读写，平台分叉与 saveIndex 同构）、孤儿重建、`resolveCutSeq`（live 内存优先，冷会话走 sessionQuery，结果永久缓存）、失败善后（prune 清残骸 + 连续 3 次失败起 5min→60min 指数退避熔断，成功即复位）、失败/跳过反馈（SNAP_SKIP 解析进 snapFeedback，`feedbackFor` 供 snapshot-info 下发，熔断期反馈暂停状态） | 改快照/回退算法 |
 | `lib/maintenance.js` | 维护域：定期 `git gc`（每 50 拍或 24h，环境变量 `DSH_RECALL_GC_SNAPS/HOURS` 可调）、会话删除联动清 tag | 改磁盘治理策略 |
@@ -97,6 +97,7 @@ DSH 消息撤回插件：在用户消息气泡旁加「撤回」按钮，把**�
 ## 已知坑（踩过的，别再踩）
 
 - keyed slot（`conversation.chat.node` key=user）不指定 priority 会因冲突拒载整个插件——必须负值优先级 + 冲突递减重试。
+- `conversation.chat.node` slot 的 props 契约里**没有 `loadImage`**，图片渲染入口是 `props.renderMessageImages`（`(owner) => ReactNode`，内部经 `conversation.message.images` slot 渲染官方 MessageImages，自带鉴权/缓存/失败重试/灯箱）：读不存在的字段守卫直接 return，功能静默失效且毫无报错（issue #9，v1.6~v1.7 用户消息图片因此从未显示）。调用形如 `renderMessageImages({ images: [{attachment}], align: 'end' })`——images 传 image 块数组（内部取 `image.attachment.attachmentId`），不是裸 attachment；布局顺序对齐官方 UserStyleBubble：图片在上、气泡在下。任何 slot props 字段先查官方 `.d.ts`（dsh-client-ui-conversation 的 slots.d.ts / ChatNodeSeat.d.ts），别靠猜。
 - `node.id` 才是真实消息 ID（快照主键）；`node.key` 是位置键（如 `13:input`），不能用于查询。
 - Client 查 `snapshot-info` 前必须等 `ensureInit` 完成回调，否则冷启动误判 `has:false` 且不重试，按钮永不出现。
 - fork 不传 `increaseTitle`（2026-08 修复）：否则撤回出的新会话标题变「xxx 2」且多次撤回递增。
