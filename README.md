@@ -9,6 +9,7 @@
 
 ![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.2-blue)
 ![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.1-blue)
+![DSH](https://img.shields.io/badge/DSH-Desktop-blue)
 ---
 **在任意一条你发过的消息下方**，**点「↶ 撤回」**，**工作区文件和对话历史一起回到那条消息发出之前的状态**。(dsh-0.1.1-rc.2)
 ---
