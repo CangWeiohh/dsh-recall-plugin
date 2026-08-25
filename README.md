@@ -22,9 +22,9 @@
 ![悬停出现撤回按钮](docs/screenshots/recall-button.png)
 
 ---
-| 确认面板 · 变更文件清单| 确认面板 · 变更文件清单|
+| 确认面板 · 变更文件清单 | 确认面板 · 回退范围说明 |
 | --- | --- |
-| ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板](docs/screenshots/confirm-panel-2.png) |
+| ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板 · 回退范围说明](docs/screenshots/confirm-panel-2.png) |
 
 - 撤回后自动把消息文本回填到输入框，方便修改后重发（可在设置卡片关闭）
 - 设置页 · 插件配置卡片（阈值 / 排除表 / 快照管理，保存即热生效）
@@ -39,8 +39,11 @@
 - **项目目录保持干净**：快照始终存在 `$DSH_HOME` 下，不会往项目里塞任何东西；与会话的沙箱权限无关（workspace-write / read-only 会话照常快照与回退），仅当 home 本身不可写（如指到只读盘）才降级到项目内 `.dsh-recall-snapshots`（降级时页面会提示），home 恢复后自动迁走、清理干净。
 - **可以反复后悔**：只要会话还在（含归档），快照全量保留、不修剪。撤回一次后还能再撤到更早；撤回时被覆盖的文件也一直找得回来。会话被彻底删除后，其快照随之清理（见下）。
 - **先看清单再动手**：点撤回先弹出将变更的文件清单（修改 / 恢复 / 删除），确认后才执行，不会稀里糊涂覆盖。
-- **磁盘友好**：快照走 git delta 压缩，是增量不是整目录拷贝；超过 100MB 的大文件自动跳过。
+- **磁盘友好**：快照走 git delta 压缩，是增量不是整目录拷贝；超过 100MB 的大文件自动跳过（阈值可在设置卡片改）。
 - **自动瘦身**：定期 `git gc` 把 loose 对象压 pack（无损，快照一个不丢）；会话删除后其快照自动清理；构建产物可经 `exclude.txt` 全局排除（见下）。
+- **失败了会说话**（1.7.0+）：快照失败、跳过路径、连续失败熔断都会在页面顶部 toast 提示（同类故障 10 分钟只打扰一次），不会无声失效；失败原因进设置卡片「最近错误」。
+- **故障自愈**（1.7.0+）：快照失败后自动清理残骸对象、连续 3 次失败起指数退避熔断（冷却后自动重试），失败路径还会清扫漏网的 git 进程与残留锁——磁盘不会被失败重试撑爆，也不会被一次异常卡死。
+- **个别路径进不去就跳过**（1.7.0+）：嵌入式 git 仓库、无读权限等无法索引的路径不再让整条快照失败——快照照常落盘，被跳过的路径 toast 告知（撤回时既不恢复也不删它们，与排除表语义一致）。
 - **树形快照管理**：设置页「快照管理」按 **工作区 → 会话 → 快照** 三级树形展示，支持展开/折叠；每级右侧都有删除按钮，可一次清掉整个工作区或某个会话的全部快照，叶子显示该快照对应的消息内容摘要，方便定位“这条消息当时改了什么”。
 
 ## 已知限制
@@ -48,7 +51,7 @@
 - 快照在**消息发送时**创建，插件启用前的历史消息没有快照，不显示撤回按钮。
 - 会话第一条用户消息无法回退对话（仅文件回退），因为 fork 需要更早的 turn 边界。
 - 支持 Windows（PowerShell 5.1/7 + git CLI）与 Linux/macOS（bash + git CLI）。Windows 真机验证充分；Linux 已在 WSL2（Ubuntu 26.04，bash 5.3 + git 2.53）实测全流程（含中文路径、home 降级、会话清理、gc）；macOS 侧脚本按 bash 3.2 兼容编写，尚未真机实测。
-- 工作区内嵌套的其他 git 仓库（子目录自带 `.git`）不进快照，其内容不参与回退。
+- 工作区内嵌套的其他 git 仓库（子目录自带 `.git`）无法索引：快照对其余部分照常（fail-open，页面会提示跳过了哪些路径），但其内容不参与回退。
 - 文件名含换行/TAB 的极端情形不在 diff 清单的解析能力内（概率可忽略）。
 
 ## 安装
@@ -110,20 +113,28 @@ pm2 restart <你的dsh进程名>   # 若用 pm2 托管
   git --git-dir="<store>\git\.git" ls-tree -r --name-only snap-<消息ID>
   ```
 
-
-
 ## 本地开发（无需发布）
 
+把 profile 对本包的依赖改成 `link:` 指向克隆目录，改完代码重启 DSH 即生效（工作区 `lib/` 即运行代码，无需复制或发布）：
+
 ```powershell
-# 把包目录放进 web profile 的 node_modules，并登记到 bundles
-$pkg = '<你的仓库克隆路径>\dsh-recall-plugin'
-$profile = "$env:USERPROFILE\.dsh\profiles\web"
-Copy-Item -Recurse -Force $pkg "$profile\node_modules\dsh-recall-plugin"
-# 手动编辑 $profile\package.json：
-#   dependencies 加 "dsh-recall-plugin": "1.0.0"
-#   dsh.profile.bundles 加 "dsh-recall-plugin"
-# 然后重启 DSH 并硬刷新页面
+# 1. 编辑 $env:USERPROFILE\.dsh\profiles\web\package.json：
+#    "dependencies" 里 "dsh-recall-plugin": "link:<你的克隆路径>\dsh-recall-plugin"
+#    "dsh.profile.bundles" 已含 "dsh-recall-plugin"（官方命令装过一次即可）
+# 2. 在 profile 目录安装并重启
+cd $env:USERPROFILE\.dsh\profiles\web
+pnpm install
+# 3. 重启 DSH + 硬刷新页面（Ctrl+Shift+R）
 ```
+
+Windows 开发者注意：Host 侧 `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery` 未发布公共 npm（registry 上缺 0.1.1-rc.2），ESM 按真实路径解析需要工作区自备 junction：
+
+```powershell
+cmd /c mklink /J node_modules\@deepseek-ai\schemastery "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\schemastery"
+cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-settings"
+```
+
+联调完切回 npm 版本：依赖改回 `"^<ver>"` 后 `pnpm install`（或 `pnpm install dsh-recall-plugin@<ver>` 精确指定）。
 
 ## License
 

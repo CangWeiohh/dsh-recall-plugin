@@ -19,9 +19,9 @@
 ![Recall button appears on hover](docs/screenshots/recall-button.png)
 
 ---
-| Confirmation panel · file change list | |
+| Confirmation panel · file change list | Confirmation panel · rollback scope |
 | --- | --- |
-| ![Confirmation panel · file change list](docs/screenshots/confirm-panel-1.png) | ![Confirmation panel](docs/screenshots/confirm-panel-2.png) |
+| ![Confirmation panel · file change list](docs/screenshots/confirm-panel-1.png) | ![Confirmation panel · rollback scope](docs/screenshots/confirm-panel-2.png) |
 
 - After a recall, the message text is auto-refilled into the input box for quick editing and resending (can be disabled in the settings card)
 - Settings · plugin config card (thresholds / exclusions / snapshot manager, saved changes apply live)
@@ -41,8 +41,11 @@
 - **Keeps your project directory clean**: snapshots always live under `$DSH_HOME`, nothing is ever dropped into your project — regardless of the session's sandbox permission (workspace-write / read-only sessions snapshot and recall as usual). Only when home itself is unwritable (e.g. pointed at a read-only drive) does it fall back to an in-project `.dsh-recall-snapshots` directory (the page shows a notice when degraded); once home is writable again, data migrates back and the fallback directory is cleaned up.
 - **Change your mind as many times as you like**: as long as the session still exists (including archived ones), snapshots are fully retained and never pruned. After one recall you can recall again to an even earlier point; files overwritten during a recall always remain recoverable. Once a session is permanently deleted, its snapshots are cleaned up accordingly (see below).
 - **See the list before you act**: clicking recall first shows the list of files that will change (modified / restored / deleted); nothing is overwritten until you confirm.
-- **Disk-friendly**: snapshots use git delta compression — incremental, not full-directory copies. Files larger than 100MB are skipped automatically.
+- **Disk-friendly**: snapshots use git delta compression — incremental, not full-directory copies. Files larger than 100MB are skipped automatically (the threshold is configurable in the settings card).
 - **Automatic housekeeping**: periodic `git gc` packs loose objects (lossless — not a single snapshot is lost); snapshots of deleted sessions are cleaned up automatically; build artifacts can be excluded globally via `exclude.txt` (see below).
+- **Failures speak up** (1.7.0+): snapshot failures, skipped paths, and circuit-breaker pauses all surface as a toast at the top of the page (the same fault only bothers you once per 10 minutes) — nothing fails silently; the failure reason lands in the "Recent errors" section of the settings card.
+- **Self-healing on failure** (1.7.0+): after a snapshot fails, leftover objects are pruned automatically; 3 consecutive failures trigger an exponential-backoff circuit breaker (auto-retry after the cooldown); the failure path also sweeps stray git processes and stale locks — the disk never bloats from failed retries, and a single hiccup can't wedge the pipeline.
+- **Unindexable paths are skipped, not fatal** (1.7.0+): embedded git repositories, unreadable files, and other paths that can't be indexed no longer fail the whole snapshot — the snapshot is still taken, and skipped paths are reported via toast (on recall they are neither restored nor deleted, same semantics as exclusions).
 - **Tree-view snapshot manager**: the "Snapshot Manager" on the settings page shows a **workspace → session → snapshot** three-level tree with expand/collapse support; each level has a delete button on its right, so you can clear all snapshots of a workspace or a session at once. Leaves show a summary of the message content the snapshot corresponds to, making it easy to locate "what this message changed back then".
 
 ## Known Limitations
@@ -50,7 +53,7 @@
 - Snapshots are created **when a message is sent**; messages from before the plugin was enabled have no snapshot and show no recall button.
 - The first user message of a session cannot roll back the conversation (files only), because fork requires an earlier turn boundary.
 - Supports Windows (PowerShell 5.1/7 + git CLI) and Linux/macOS (bash + git CLI). Windows is thoroughly verified on real machines; Linux has been fully tested on WSL2 (Ubuntu 26.04, bash 5.3 + git 2.53), including Chinese paths, home fallback, session cleanup, and gc; the macOS side is written to be bash 3.2 compatible but has not been tested on real hardware yet.
-- Nested git repositories inside the workspace (subdirectories with their own `.git`) are not snapshotted; their contents do not participate in recalls.
+- Nested git repositories inside the workspace (subdirectories with their own `.git`) cannot be indexed: the snapshot proceeds for everything else (fail-open, with a toast listing the skipped paths), but their contents do not participate in recalls.
 - Extreme cases like filenames containing newlines/TAB are beyond the diff list's parsing capability (negligible probability).
 
 ## Installation
@@ -111,20 +114,28 @@ When each user message is sent (before the agent touches any files), the workspa
   git --git-dir="<store>\git\.git" ls-tree -r --name-only snap-<messageID>
   ```
 
-
-
 ## Local Development (without publishing)
 
+Point the profile's dependency for this package at your clone via `link:`, and changes take effect after restarting DSH (the workspace `lib/` IS the running code — no copying or publishing needed):
+
 ```powershell
-# Drop the package directory into the web profile's node_modules and register it in bundles
-$pkg = '<path-to-your-clone>\dsh-recall-plugin'
-$profile = "$env:USERPROFILE\.dsh\profiles\web"
-Copy-Item -Recurse -Force $pkg "$profile\node_modules\dsh-recall-plugin"
-# Manually edit $profile\package.json:
-#   add "dsh-recall-plugin": "1.0.0" to dependencies
-#   add "dsh-recall-plugin" to dsh.profile.bundles
-# then restart DSH and hard-refresh the page
+# 1. Edit $env:USERPROFILE\.dsh\profiles\web\package.json:
+#    in "dependencies", set "dsh-recall-plugin": "link:<path-to-your-clone>\dsh-recall-plugin"
+#    "dsh.profile.bundles" should already contain "dsh-recall-plugin" (run the official install command once)
+# 2. Install in the profile directory and restart
+cd $env:USERPROFILE\.dsh\profiles\web
+pnpm install
+# 3. Restart DSH and hard-refresh the page (Ctrl+Shift+R)
 ```
+
+Note for Windows developers: the Host-side `@deepseek-ai/dsh-settings` and `@deepseek-ai/schemastery` packages are not published to the public npm registry (0.1.1-rc.2 is missing there), and ESM resolves by real module path, so the workspace needs its own junctions:
+
+```powershell
+cmd /c mklink /J node_modules\@deepseek-ai\schemastery "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\schemastery"
+cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-settings"
+```
+
+To switch back to the npm release after debugging: change the dependency back to `"^<ver>"` and run `pnpm install` (or `pnpm install dsh-recall-plugin@<ver>` to pin an exact version).
 
 ## License
 
