@@ -7,9 +7,10 @@
 ![npm](https://img.shields.io/npm/v/dsh-recall-plugin?label=npm&color=cb3837)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
-![DSH](https://img.shields.io/badge/DSH-0.1.0--rc-blue)
 ![Build](https://img.shields.io/badge/%E7%BA%AFJS-%E9%9B%B6%E6%9E%84%E5%BB%BA-green)
 
+![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.2-blue)
+![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.1-blue)
 ---
 **在任意一条你发过的消息下方**，**点「↶ 撤回」**，**工作区文件和对话历史一起回到那条消息发出之前的状态**。(dsh-0.1.1-rc.2)
 ---
