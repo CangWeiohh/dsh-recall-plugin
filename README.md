@@ -127,14 +127,6 @@ pnpm install
 # 3. 重启 DSH + 硬刷新页面（Ctrl+Shift+R）
 ```
 
-Windows 开发者注意：Host 侧 `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery` 未发布公共 npm（registry 上缺 0.1.1-rc.2），ESM 按真实路径解析需要工作区自备 junction：
-
-```powershell
-cmd /c mklink /J node_modules\@deepseek-ai\schemastery "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\schemastery"
-cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-settings"
-```
-
-联调完切回 npm 版本：依赖改回 `"^<ver>"` 后 `pnpm install`（或 `pnpm install dsh-recall-plugin@<ver>` 精确指定）。
 
 ## License
 
