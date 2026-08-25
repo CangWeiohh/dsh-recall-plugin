@@ -1,7 +1,5 @@
 # dsh-recall-plugin
 
-> 撤回一条消息，项目文件也一起回去。
-
 简体中文 | [English](README.en.md)
 
 ![npm](https://img.shields.io/npm/v/dsh-recall-plugin?label=npm&color=cb3837)
