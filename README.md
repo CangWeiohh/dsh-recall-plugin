@@ -136,6 +136,12 @@ cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modu
 
 联调完切回 npm 版本：依赖改回 `"^<ver>"` 后 `pnpm install`（或 `pnpm install dsh-recall-plugin@<ver>` 精确指定）。
 
+### 测试
+
+- `npm test`：纯逻辑单测（vitest，无 DSH 依赖，CI 与本地同跑）——配置解析、快照解析器、脚本模板同名导出契约、客户端纯函数、发布包内容布局、快照索引持久化、存储总量上限；
+- `npm run test:probe`：官方 API 字段探针（依赖本机 dsh 安装；dsh 升级后本地必跑）——钉住 `renderMessageImages`/`node`/`cwd`、`sessions.fork` 的 `atSeq`/`increaseTitle`、`listSessions` 记录结构、`AgentRegistry` 等字段，违反即红（合规清单 #8 的机器化）。
+- CI（GitHub Actions）跑 `npm ci --legacy-peer-deps` + `npm test`（探针只在有 dsh 的机器跑）。
+
 ## License
 
 MIT

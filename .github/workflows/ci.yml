@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit:
+    name: Unit tests + pack layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dev deps only
+        # 项目 peerDeps 是私有 @deepseek-ai 包（CI 不可得），--legacy-peer-deps
+        # 跳过、只装 devDependencies（vitest）；发布仍走现有手动流程。
+        run: npm ci --legacy-peer-deps
+      - name: Unit tests
+        run: npm test
+      - name: Pack layout smoke
+        # 单测里的 package-layout.test.js 已跑 pack --dry-run 断言包内容；
+        # 这里再显式执行一次 npm pack 验证无意外（如 files 配置缺失报错）。
+        run: npm pack --dry-run
