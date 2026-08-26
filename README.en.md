@@ -64,7 +64,7 @@ Prerequisites: git CLI (without it the recall button won't appear and a notice s
 ```powershell
 dsh plugin --profile web add dsh-recall-plugin
 ```
-- Or install directly from git (pure JS, no build step, no prepare/allowBuilds needed):
+- Or install directly from git:
 ```powershell
 dsh plugin --profile web add github:limbo947/dsh-recall-plugin
 ```

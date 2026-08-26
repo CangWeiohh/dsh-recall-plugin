@@ -63,7 +63,7 @@
 ```powershell
 dsh plugin --profile web add dsh-recall-plugin
 ```
-- 也可从 git 直接安装（纯 JS 无构建，免 prepare/allowBuilds）：
+- 也可从 git 直接安装：
 ```powershell
 dsh plugin --profile web add github:limbo947/dsh-recall-plugin
 ```
