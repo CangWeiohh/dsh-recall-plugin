@@ -3,8 +3,11 @@
  *
  * createSnapshots 是工厂函数，注入假 rt/ctx/state 即可不跑 git 测试
  * saveIndex/loadIndex（纯索引 JSON 读写链路，经过 mock 的
- * rt.writeTextViaShell / rt.runShell）。钉住：
- * - 失败/有跳过消息的 feedback 写进 index.json、正常快照不带；
+ * rt.writeTextViaShell / rt.runShell）。钉住真实形状：
+ * - 有跳过消息的 feedback 写进 index.json、正常快照不带；
+ * - failed feedback 是纯内存态——失败消息没有索引条目（captureSnapshot
+ *   失败路径只写 snapFeedback），saveIndex 按索引条目遍历故无从写入，
+ *   重启即失（瞬态语义与熔断一致，有意决策见 plan-p1.md P1-2 差异）；
  * - loadIndex 回填回 snapFeedback（重启后 snapshot-info 仍可解释）；
  * - 旧格式索引（无 feedback 字段）正常载入、不产生 feedback。
  */
@@ -49,23 +52,27 @@ const ROOT = 'D:/ws'
 const SID = 'session-1'
 
 describe('P1-2 feedback 持久化', () => {
-  it('saveIndex：失败/有跳过消息写入 feedback，正常快照不带', async () => {
+  it('saveIndex：有跳过消息写入 feedback，正常快照不带；failed 不落盘（无索引条目）', async () => {
     const state = fakeState()
     const rt = fakeRt(state)
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
-    state.snapshots.set('m-fail', { root: ROOT, time: 1000, sessionId: SID })
+    // 真实形状：skipped 是成功快照的反馈（条目与 feedback 并存）；failed
+    // 消息没有快照，captureSnapshot 失败路径只写 feedback 不写索引条目。
     state.snapshots.set('m-skip', { root: ROOT, time: 2000, sessionId: SID })
     state.snapshots.set('m-ok', { root: ROOT, time: 3000, sessionId: SID })
-    state.snapFeedback.set('m-fail', { failed: true, error: 'boom' })
     state.snapFeedback.set('m-skip', { skipped: ['a/', 'b/'] })
+    state.snapFeedback.set('m-fail', { failed: true, error: 'boom' })
 
     await snaps.saveIndex(ROOT, SID)
 
     const entries = JSON.parse(await rt.runShell('READ /store'))
-    expect(entries.find((e) => e.id === 'm-fail').feedback).toEqual({ failed: true, error: 'boom' })
     expect(entries.find((e) => e.id === 'm-skip').feedback).toEqual({ skipped: ['a/', 'b/'] })
     expect(entries.find((e) => e.id === 'm-ok').feedback).toBeUndefined()
+    // 现状钉子：saveIndex 按 state.snapshots 遍历，failed 消息无条目 →
+    // feedback 不落盘。有意决策：failed 与熔断同为瞬态内存态，写无 tag 的
+    // 幽灵条目会让 manage 树形把不存在的快照当节点（见 plan-p1.md）。
+    expect(entries.find((e) => e.id === 'm-fail')).toBeUndefined()
   })
 
   it('loadIndex：回填 feedback 到 snapFeedback（重启后可解释）', async () => {
@@ -73,6 +80,8 @@ describe('P1-2 feedback 持久化', () => {
     const rt = fakeRt(state)
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
+    // 注：带 feedback 的 failed 条目当前不会由 saveIndex 产生（见上例），
+    // 此处钉读取端防御——手工编辑/未来版本写入的索引仍被正确回填。
     const idx = JSON.stringify([
       { id: 'm-fail', time: 1000, root: ROOT, sessionId: SID, feedback: { failed: true, error: 'boom' } },
       { id: 'm-skip', time: 2000, root: ROOT, sessionId: SID, feedback: { skipped: ['a/'] } },
@@ -124,14 +133,15 @@ describe('P1-2 feedback 持久化', () => {
     expect(state.snapFeedback.has('m3')).toBe(false) // failed:false 无 skipped → 不需要解释
   })
 
-  it('saveIndex→loadIndex 往返：feedback 一致、正常消息不受影响（模拟重启）', async () => {
-    // 第一轮：写入
+  it('saveIndex→loadIndex 往返：skipped 一致、failed 内存态重启即失（模拟重启）', async () => {
+    // 第一轮：写入（真实形状：m-skip 条目+feedback，m-fail 只有 feedback）
     const state = fakeState()
     const rt = fakeRt(state)
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
-    state.snapshots.set('m-fail', { root: ROOT, time: 1000, sessionId: SID })
+    state.snapshots.set('m-skip', { root: ROOT, time: 2000, sessionId: SID })
     state.snapshots.set('m-ok', { root: ROOT, time: 3000, sessionId: SID })
+    state.snapFeedback.set('m-skip', { skipped: ['a/'] })
     state.snapFeedback.set('m-fail', { failed: true, error: 'boom' })
     await snaps.saveIndex(ROOT, SID)
     const persisted = await rt.runShell('READ /store')
@@ -144,9 +154,11 @@ describe('P1-2 feedback 持久化', () => {
     rt2.runShell = async () => persisted
     await snaps2.loadIndex(ROOT, SID)
 
-    expect(state2.snapshots.has('m-fail')).toBe(true)
+    expect(state2.snapshots.has('m-skip')).toBe(true)
     expect(state2.snapshots.has('m-ok')).toBe(true)
-    expect(state2.snapFeedback.get('m-fail')).toEqual({ failed: true, error: 'boom' })
+    expect(state2.snapFeedback.get('m-skip')).toEqual({ skipped: ['a/'] })
     expect(state2.snapFeedback.has('m-ok')).toBe(false)
+    // failed 是瞬态内存态：没进索引，重启后自然消失（重试自愈/熔断接管）
+    expect(state2.snapFeedback.has('m-fail')).toBe(false)
   })
 })
