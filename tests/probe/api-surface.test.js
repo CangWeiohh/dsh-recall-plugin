@@ -107,4 +107,21 @@ describe('官方 API 字段探针（dsh 安装目录）', () => {
       expect(read('dsh-session', '/lib/types/types.d.ts')).toMatch(/cwd\??:\s*string/)
     })
   })
+
+  describe('settings RPC 契约（config-reset 依赖，S1-3）', () => {
+    const p = 'dsh-host-apiproxy'
+    const f = '/lib/types/api/settings.d.ts'
+    const guard = () => has(p, f)
+
+    probeIf(guard)('replace(ns, section) 存在（恢复默认的官方 reset 路径）', () => {
+      const src = read(p, f)
+      expect(src).toMatch(/replace\(request:\s*RpcRequest<\{\s*\n\s*ns:\s*string;\s*\n\s*section:\s*object;/)
+    })
+
+    probeIf(guard)('mutate 支持路径级 unset op（清除单字段的通道）', () => {
+      const src = read(p, f)
+      expect(src).toMatch(/op:\s*'set'/)
+      expect(src).toMatch(/op:\s*'unset'/)
+    })
+  })
 })

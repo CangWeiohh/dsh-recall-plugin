@@ -26,7 +26,7 @@ function chain() {
   return self
 }
 
-import { createConfig } from '../../lib/config.js'
+import { createConfig, DEFAULTS } from '../../lib/config.js'
 
 describe('createConfig', () => {
   const ENV_KEYS = ['DSH_RECALL_GC_SNAPS', 'DSH_RECALL_GC_HOURS']
@@ -48,6 +48,9 @@ describe('createConfig', () => {
       maxSnapshotsPerWorkspace: 500,
       baseExcludes: ['.git', 'node_modules/', '.dsh-recall-snapshots/', 'dsh-recall-snapshots/'],
       refillDraft: true,
+      snapshotEnabled: true,
+      archiveOriginal: true,
+      retentionDays: 0,
     })
   })
 
@@ -98,6 +101,41 @@ describe('createConfig', () => {
     expect(createConfig({ refillDraft: false }).refillDraft).toBe(false)
     expect(createConfig({ refillDraft: 'no' }).refillDraft).toBe(true)
     expect(createConfig({}).refillDraft).toBe(true)
+  })
+
+  it('snapshotEnabled 只接受布尔，非布尔回退 true', () => {
+    expect(createConfig({ snapshotEnabled: false }).snapshotEnabled).toBe(false)
+    expect(createConfig({ snapshotEnabled: 0 }).snapshotEnabled).toBe(true)
+    expect(createConfig({}).snapshotEnabled).toBe(true)
+  })
+
+  it('archiveOriginal 只接受布尔，非布尔回退 true', () => {
+    expect(createConfig({ archiveOriginal: false }).archiveOriginal).toBe(false)
+    expect(createConfig({ archiveOriginal: 'no' }).archiveOriginal).toBe(true)
+    expect(createConfig({}).archiveOriginal).toBe(true)
+  })
+
+  it('retentionDays：正常值生效，0/负值 = 不启用，非法回退 0', () => {
+    expect(createConfig({ retentionDays: 30 }).retentionDays).toBe(30)
+    expect(createConfig({ retentionDays: 0 }).retentionDays).toBe(0)
+    expect(createConfig({ retentionDays: -5 }).retentionDays).toBe(0)
+    expect(createConfig({ retentionDays: 'abc' }).retentionDays).toBe(0)
+    expect(createConfig({}).retentionDays).toBe(0)
+  })
+
+  it('DEFAULTS 与 schema 默认值一致（config-reset 降级路径的单一事实源）', () => {
+    const fresh = createConfig({})
+    expect(DEFAULTS).toEqual({
+      gcSnaps: fresh.gcSnaps,
+      gcHours: fresh.gcHours,
+      maxFileBytes: fresh.maxFileBytes,
+      maxSnapshotsPerWorkspace: fresh.maxSnapshotsPerWorkspace,
+      baseExcludes: fresh.baseExcludes,
+      refillDraft: fresh.refillDraft,
+      snapshotEnabled: fresh.snapshotEnabled,
+      archiveOriginal: fresh.archiveOriginal,
+      retentionDays: fresh.retentionDays,
+    })
   })
 
   it('raw 非对象（null/string）按空配置处理', () => {
