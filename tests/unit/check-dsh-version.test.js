@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   parseVersion, compareVersions, parseRange, satisfiesRange,
-  buildReport, readMirrorVersion,
+  buildReport, parseMirrorVersion,
 } from '../../scripts/check-dsh-version.mjs'
 
 describe('parseVersion', () => {
@@ -93,9 +93,22 @@ describe('satisfiesRange', () => {
   })
 })
 
-describe('readMirrorVersion', () => {
-  it('reference/README.md 已记录归档 dsh 版本（与本地一致则巡检安静退出）', () => {
-    expect(readMirrorVersion()).toBe('0.1.1-rc.2')
+describe('parseMirrorVersion', () => {
+  it('从 README 头部文本提取归档 dsh 版本（冒号中英文均识别）', () => {
+    const text = [
+      '# 官方文档镜像（reference）',
+      '> 归档日期：2026-08-25，对应 deepseek-harness 仓库 master 分支 docs/ 目录。',
+      '> 归档 dsh 版本：0.1.1-rc.2（npm run check:dsh 的漂移比对基准）',
+    ].join('\n')
+    expect(parseMirrorVersion(text)).toBe('0.1.1-rc.2')
+    expect(parseMirrorVersion(text.replace('版本：', '版本:'))).toBe('0.1.1-rc.2')
+  })
+
+  it('字段缺失/非法输入返回 null（不抛错）', () => {
+    expect(parseMirrorVersion('# 无版本字段的文本')).toBeNull()
+    expect(parseMirrorVersion('')).toBeNull()
+    expect(parseMirrorVersion(null)).toBeNull()
+    expect(parseMirrorVersion(undefined)).toBeNull()
   })
 })
 

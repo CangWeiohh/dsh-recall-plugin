@@ -220,16 +220,23 @@ export function fetchLatestDshVersion() {
   }
 }
 
-/** 从 reference/README.md 提取「归档 dsh 版本：x.y.z」；字段缺失返回 null。
+/** 从 reference/README.md 头部文本提取「归档 dsh 版本：x.y.z」；字段缺失
+ * 返回 null。纯函数（单测直接钉）；readMirrorVersion 负责读文件后复用。
  * 为何读 README 而非建独立文件：重拉镜像本来就要更新 README 头（归档日期），
  * 版本字段跟着它走，单一更新点、不会被忘。 */
+export function parseMirrorVersion(text) {
+  if (typeof text !== 'string') return null
+  const m = /归档\s*dsh\s*版本[:：]\s*([0-9][0-9A-Za-z.\-]*)/.exec(text)
+  return m ? m[1] : null
+}
+
+/** 读 reference/README.md 并提取归档 dsh 版本；文件不存在/读取失败返回 null
+ * （CI 等无 reference/ 镜像的环境自然降级，由巡检提示补写字段）。 */
 export function readMirrorVersion() {
   const file = path.join(ROOT, 'reference', 'README.md')
   if (!fs.existsSync(file)) return null
   try {
-    const text = fs.readFileSync(file, 'utf8')
-    const m = /归档\s*dsh\s*版本[:：]\s*([0-9][0-9A-Za-z.\-]*)/.exec(text)
-    return m ? m[1] : null
+    return parseMirrorVersion(fs.readFileSync(file, 'utf8'))
   } catch {
     return null
   }
