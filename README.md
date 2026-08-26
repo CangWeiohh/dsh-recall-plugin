@@ -53,6 +53,7 @@
 - 支持 Windows（PowerShell 5.1/7 + git CLI）与 Linux/macOS（bash + git CLI）。Windows 真机验证充分；Linux 已在 WSL2（Ubuntu 26.04，bash 5.3 + git 2.53）实测全流程（含中文路径、home 降级、会话清理、gc）；macOS 侧脚本按 bash 3.2 兼容编写，尚未真机实测。
 - 工作区内嵌套的其他 git 仓库（子目录自带 `.git`）无法索引：快照对其余部分照常（fail-open，页面会提示跳过了哪些路径），但其内容不参与回退。
 - 文件名含换行/TAB 的极端情形不在 diff 清单的解析能力内（概率可忽略）。
+- **与 dsh-routing-suite（渐进式工具披露路由）的交互**：若同时启用 dsh-routing-suite 的 router-standard 预设，撤回会经 `sessions.fork` 出新会话，而路由的阶段状态按会话 id 持久化（`$DSH_HOME/router-standard/stages.json`，未设时 `~/.dsh/router-standard/stages.json`）——fork 出的新会话没有记录，路由阶段会重置为默认（工具面临时收窄）。dsh-routing-suite ≥ v1.20.3 已解决：路由在 `agent/pre-step` 读取官方 `SessionHeader.parentSession`，撤回 fork 出的新会话自动继承父会话阶段（`stage`/`guided`/`stageAtTime`），无需本插件改动，重启 DSH 生效。旧版本无继承时，撤回后可在新会话手动 `phase_advance` 恢复阶段。本插件不依赖该路由，两者独立可用。
 
 ## 安装
 
