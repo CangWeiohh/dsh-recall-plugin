@@ -128,14 +128,6 @@ pnpm install
 # 3. Restart DSH and hard-refresh the page (Ctrl+Shift+R)
 ```
 
-Note for Windows developers: the Host-side `@deepseek-ai/dsh-settings` and `@deepseek-ai/schemastery` packages are not published to the public npm registry (0.1.1-rc.2 is missing there), and ESM resolves by real module path, so the workspace needs its own junctions:
-
-```powershell
-cmd /c mklink /J node_modules\@deepseek-ai\schemastery "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\schemastery"
-cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-settings"
-```
-
-To switch back to the npm release after debugging: change the dependency back to `"^<ver>"` and run `pnpm install` (or `pnpm install dsh-recall-plugin@<ver>` to pin an exact version).
 
 ## License
 

@@ -1,17 +1,17 @@
 # dsh-recall-plugin
 
-> 撤回一条消息，项目文件也一起回去。
-
 简体中文 | [English](README.en.md)
 
 ![npm](https://img.shields.io/npm/v/dsh-recall-plugin?label=npm&color=cb3837)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
-![DSH](https://img.shields.io/badge/DSH-0.1.0--rc-blue)
 ![Build](https://img.shields.io/badge/%E7%BA%AFJS-%E9%9B%B6%E6%9E%84%E5%BB%BA-green)
 
+![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.2-blue)
+![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.1-blue)
+![DSH](https://img.shields.io/badge/DSH-Desktop-blue)
 ---
-**在任意一条你发过的消息下方**，**点「↶ 撤回」**，**工作区文件和对话历史一起回到那条消息发出之前的状态**。
+**在任意一条你发过的消息下方**，**点「↶ 撤回」**，**工作区文件和对话历史一起回到那条消息发出之前的状态**。(dsh-0.1.1-rc.2)
 ---
 
 [更新日志](CHANGELOG.md)
@@ -127,14 +127,6 @@ pnpm install
 # 3. 重启 DSH + 硬刷新页面（Ctrl+Shift+R）
 ```
 
-Windows 开发者注意：Host 侧 `@deepseek-ai/dsh-settings`、`@deepseek-ai/schemastery` 未发布公共 npm（registry 上缺 0.1.1-rc.2），ESM 按真实路径解析需要工作区自备 junction：
-
-```powershell
-cmd /c mklink /J node_modules\@deepseek-ai\schemastery "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\schemastery"
-cmd /c mklink /J node_modules\@deepseek-ai\dsh-settings "%APPDATA%\npm\node_modules\@deepseek-ai\dsh\node_modules\@deepseek-ai\dsh-settings"
-```
-
-联调完切回 npm 版本：依赖改回 `"^<ver>"` 后 `pnpm install`（或 `pnpm install dsh-recall-plugin@<ver>` 精确指定）。
 
 ### 测试
 
