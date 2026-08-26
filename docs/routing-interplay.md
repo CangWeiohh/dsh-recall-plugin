@@ -25,6 +25,8 @@
 ## 解决方案：本地修改 dsh-routing-suite 预设
 
 > dsh-routing-suite 是第三方注入器预设（本插件作者不维护其版本发布），**不保证上游存在含下述改动的版本**。以下方案是**本地文件改动**：直接改本机预设源码并部署，不依赖上游发布，也不影响本插件的安装与发布。
+>
+> **修改针对的预设版本**：`router-bootstrap`（standard）**v1.20.0**——见预设文件头部版本注释（`router-bootstrap (standard v1.20.0)`）；本机 agent-presets 原始部署于 2026-08-26。下文步骤适用于该版本及结构相近的后续版本；若你机器上的文件头版本不同，先核对 `agent/pre-step`、`ensureStage`、`applyStageRestrict`、`installMetaShim` 这些符号是否一致，再按步骤修改。
 
 原理：路由在 `agent/pre-step` 最先执行时，若当前会话尚无阶段记录，读取官方 `SessionHeader.parentSession`（fork 来源），把父会话的阶段记录（`stage` / `guided` / `stageAtTime`）复制到新会话 id，并同步工具面（`applyStageRestrict`）与元工具（`installMetaShim`），随后持久化。
 
