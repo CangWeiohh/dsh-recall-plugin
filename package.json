@@ -28,6 +28,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "check:dsh": "node scripts/check-dsh-version.mjs",
     "test": "vitest run tests/unit",
     "test:probe": "vitest run tests/probe"
   },
