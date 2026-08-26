@@ -5,7 +5,7 @@
 ![npm](https://img.shields.io/npm/v/dsh-recall-plugin?label=npm&color=cb3837)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
-![Build](https://img.shields.io/badge/%E7%BA%AFJS-%E9%9B%B6%E6%9E%84%E5%BB%BA-green)
+![Build](https://img.shields.io/badge/%E7%BA%AFJS-green)
 
 ![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.2-blue)
 ![DSH](https://img.shields.io/badge/DSH-0.1.1--rc.1-blue)

@@ -8,7 +8,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-blue)
 ![DSH](https://img.shields.io/badge/DSH-0.1.0--rc-blue)
-![Build](https://img.shields.io/badge/pure%20JS-zero%20build-green)
+![Build](https://img.shields.io/badge/pure%20JS-green)
 
 ---
 **Under any message you've sent**, **click "↶ Recall"**, **and both your workspace files and the conversation history roll back to the moment right before that message was sent**.
