@@ -1,6 +1,8 @@
-# 与 dsh-routing-suite 的交互：撤回 × 路由阶段
+# 与 dsh-routing-suite 的交互：会话 fork × 路由阶段
 
 > 本文解释 dsh-recall-plugin（消息撤回）与 dsh-routing-suite（渐进式工具披露路由）同时启用时的交互现象、成因与解决方案。README「已知限制」节的对应条目只保留现象，详情见本文。
+>
+> **触发面不只是撤回**：任何经官方 `sessions.fork` 产生的新会话都会触发同一问题——包括消息上的「在新对话中分支」按钮（`dsh-client-ui-conversation` 的 `onBranch` 同样调用 `sessions.fork({ atSeq, increaseTitle: true })`，与撤回同通道）。下文统称「fork 出的新会话」。
 
 ## 背景
 
@@ -9,14 +11,14 @@
 
 ## 现象
 
-在启用 router-standard 的会话里撤回一条消息后，新会话的路由阶段**重置为默认**——表现为工具面收窄、阶段回到初始档位，仿佛「路由不记得之前的进度」。
+在启用 router-standard 的会话里 **fork 出一个新会话**（撤回一条消息，或点消息上的「在新对话中分支」）后，新会话的路由阶段**重置为默认**——表现为工具面收窄、阶段回到初始档位，仿佛「路由不记得之前的进度」。
 
 - 影响范围：仅**同时启用两者**时存在；只使用本插件（无路由）不受影响。
-- 严重程度：低——功能不受损，阶段可手动恢复；属于会话「回到过去」语义下的状态回退，不是本插件或路由的 bug。
+- 严重程度：低——功能不受损，阶段可手动恢复；属于会话「fork 新身份」语义下的状态回退，不是本插件或路由的 bug。
 
 ## 成因
 
-1. 撤回 = `sessions.fork` → 新会话 id（官方 `SessionHeader.parentSession` 字段记录来源会话，但阶段状态不在其中）。
+1. fork（撤回 / 「在新对话中分支」）= 官方 `sessions.fork` → 新会话 id（`SessionHeader.parentSession` 字段记录来源会话，但阶段状态不在其中）。
 2. 路由阶段状态按**会话 id** 持久化（`stages.json` 的 `sessions.<id>.stage`）。
 3. fork 出的新 id 在 `stages.json` 中无记录 → 路由按默认阶段初始化 → 阶段「重置」。
 
@@ -28,7 +30,7 @@
 >
 > **修改针对的预设版本**：`router-bootstrap`（standard）**v1.20.0**——见预设文件头部版本注释（`router-bootstrap (standard v1.20.0)`）；本机 agent-presets 原始部署于 2026-08-26。下文步骤适用于该版本及结构相近的后续版本；若你机器上的文件头版本不同，先核对 `agent/pre-step`、`ensureStage`、`applyStageRestrict`、`installMetaShim` 这些符号是否一致，再按步骤修改。
 
-原理：路由在 `agent/pre-step` 最先执行时，若当前会话尚无阶段记录，读取官方 `SessionHeader.parentSession`（fork 来源），把父会话的阶段记录（`stage` / `guided` / `stageAtTime`）复制到新会话 id，并同步工具面（`applyStageRestrict`）与元工具（`installMetaShim`），随后持久化。
+原理：路由在 `agent/pre-step` 最先执行时，若当前会话尚无阶段记录，读取官方 `SessionHeader.parentSession`（fork 来源），把父会话的阶段记录（`stage` / `guided` / `stageAtTime`）复制到新会话 id，并同步工具面（`applyStageRestrict`）与元工具（`installMetaShim`），随后持久化。该改动对所有 fork 生效——撤回与官方「在新对话中分支」同路径，一处修改两者受益。
 
 ### 步骤 1：修改预设源文件
 
@@ -122,12 +124,14 @@ node --check "$env:USERPROFILE\.dsh\.agent-presets\router-standard\router-bootst
 
 ## 验证记录（2026-08-27 实测）
 
-| 撤回 | 父会话 | 子会话 | 结果 |
+| 触发方式 | 父会话 | 子会话 | 结果 |
 |---|---|---|---|
-| 修改前（原预设） | `8cc973a1`（stage 3） | `1543c77e` | 阶段重置为默认 |
-| 修改后（本地预设改动） | `1543c77e`（stage 3, guided false, stageAtTime 1787768671035） | `4b68d86f` | **继承 stage 3 / guided false / stageAtTime 完全一致** |
+| 修改前（原预设）· 撤回 | `8cc973a1`（stage 3） | `1543c77e` | 阶段重置为默认 |
+| 修改后（本地预设改动）· 撤回 | `1543c77e`（stage 3, guided false, stageAtTime 1787768671035） | `4b68d86f` | **继承 stage 3 / guided false / stageAtTime 完全一致** |
 
 证据：`stages.json` 中 `4b68d86f` 与父 `1543c77e` 的阶段记录一致；快照索引中的 `pre-rollback-*` tag 确认 fork 关系；`dev_router_status` 显示继承后阶段为「验证 (3/3)」。
+
+官方「在新对话中分支」按钮走同一 `sessions.fork` 路径（UI 侧 `onBranch → forkAt(seq) → sessions.fork({ atSeq, increaseTitle: true })`，与撤回仅 `increaseTitle` 参数不同），继承逻辑对其等价生效；上表实测为撤回场景。
 
 ## 边界与说明
 
