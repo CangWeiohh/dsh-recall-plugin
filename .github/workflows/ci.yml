@@ -20,8 +20,6 @@ jobs:
         # 跳过、只装 devDependencies（vitest）；发布仍走现有手动流程。
         run: npm ci --legacy-peer-deps
       - name: Unit tests
+        # 单测里的 package-layout.test.js 已跑 npm pack --dry-run 断言包内容，
+        # 无需单独 shell 步骤（计划原文：测试形式比 shell 步骤更可移植）。
         run: npm test
-      - name: Pack layout smoke
-        # 单测里的 package-layout.test.js 已跑 pack --dry-run 断言包内容；
-        # 这里再显式执行一次 npm pack 验证无意外（如 files 配置缺失报错）。
-        run: npm pack --dry-run
