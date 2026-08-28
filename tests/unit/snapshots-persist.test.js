@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { createSnapshots } from '../../lib/snapshots.js'
+import { createSnapshots, isSafetySnapshotId } from '../../lib/snapshots.js'
 
 function fakeState() {
   return {
@@ -35,6 +35,7 @@ function fakeRt(state) {
     stripBom: (t) => String(t == null ? '' : t).replace(/^\uFEFF/, ''),
     indexReadCmd: (dir) => 'READ ' + dir,
   }
+  const readDisk = (cmd) => (String(cmd).startsWith('READ ') ? diskIndex : '')
   return {
     state,
     isWin: false,
@@ -42,9 +43,9 @@ function fakeRt(state) {
     writeTextViaShell: async (file, text) => {
       if (String(file).endsWith('index.json')) diskIndex = String(text)
     },
-    runShell: async (cmd) => {
-      return String(cmd).startsWith('READ ') ? diskIndex : ''
-    },
+    runShell: async (cmd) => readDisk(cmd),
+    // F-G3：loadIndex 走 runShellMeta（截断可判定）；本文件无非截断场景
+    runShellMeta: async (cmd) => ({ text: readDisk(cmd), truncated: false }),
   }
 }
 
@@ -87,8 +88,10 @@ describe('P1-2 feedback 持久化', () => {
       { id: 'm-skip', time: 2000, root: ROOT, sessionId: SID, feedback: { skipped: ['a/'] } },
       { id: 'm-ok', time: 3000, root: ROOT, sessionId: SID },
     ])
-    // 直接把索引文本塞进 fake rt 的读回
-    rt.runShell = async () => idx
+    // 直接把索引文本塞进 fake rt 的读回（loadIndex 走 runShellMeta，两处都要覆盖）
+    const feedIdx = idx
+    rt.runShell = async () => feedIdx
+    rt.runShellMeta = async () => ({ text: feedIdx, truncated: false })
 
     await snaps.loadIndex(ROOT, SID)
 
@@ -102,10 +105,12 @@ describe('P1-2 feedback 持久化', () => {
     const rt = fakeRt(state)
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
-    rt.runShell = async () => JSON.stringify([
+    const legacyIdx = JSON.stringify([
       { id: 'm1', time: 1000, root: ROOT, sessionId: SID },
       { id: 'm2', time: 2000, root: ROOT, sessionId: SID },
     ])
+    rt.runShell = async () => legacyIdx
+    rt.runShellMeta = async () => ({ text: legacyIdx, truncated: false })
 
     await snaps.loadIndex(ROOT, SID)
 
@@ -119,11 +124,13 @@ describe('P1-2 feedback 持久化', () => {
     const rt = fakeRt(state)
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
-    rt.runShell = async () => JSON.stringify([
+    const dirtyIdx = JSON.stringify([
       { id: 'm1', time: 1000, root: ROOT, sessionId: SID, feedback: { failed: true, error: 42 } },
       { id: 'm2', time: 2000, root: ROOT, sessionId: SID, feedback: { skipped: 'not-array' } },
       { id: 'm3', time: 3000, root: ROOT, sessionId: SID, feedback: { failed: false } },
     ])
+    rt.runShell = async () => dirtyIdx
+    rt.runShellMeta = async () => ({ text: dirtyIdx, truncated: false })
 
     await snaps.loadIndex(ROOT, SID)
 
@@ -152,6 +159,7 @@ describe('P1-2 feedback 持久化', () => {
     const snaps2 = createSnapshots({ sessions: { get: () => null } }, rt2, { baseExcludes: [] })
     state2.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
     rt2.runShell = async () => persisted
+    rt2.runShellMeta = async () => ({ text: persisted, truncated: false })
     await snaps2.loadIndex(ROOT, SID)
 
     expect(state2.snapshots.has('m-skip')).toBe(true)
@@ -160,5 +168,57 @@ describe('P1-2 feedback 持久化', () => {
     expect(state2.snapFeedback.has('m-ok')).toBe(false)
     // failed 是瞬态内存态：没进索引，重启后自然消失（重试自愈/熔断接管）
     expect(state2.snapFeedback.has('m-fail')).toBe(false)
+  })
+})
+
+describe('F-G1 rebuildOrphans 过滤 pre-rollback 条目', () => {
+  // 专用假 rt：listTagsScript 回传指定 tag 清单，writeTextViaShell 捕获落盘索引
+  function fakeRtRebuild(state, tags) {
+    let diskIndex = ''
+    const S = {
+      stripBom: (t) => String(t == null ? '' : t).replace(/^\uFEFF/, ''),
+      indexReadCmd: (dir) => 'READ ' + dir,
+      listTagsScript: () => 'LISTTAGS',
+    }
+    return {
+      state,
+      isWin: false,
+      scripts: S,
+      resolveGit: async () => 'git-exe',
+      writeTextViaShell: async (file, text) => {
+        if (String(file).endsWith('index.json')) diskIndex = String(text)
+      },
+      runShell: async (cmd) => {
+        if (String(cmd) === 'LISTTAGS') return tags.join('\n')
+        return String(cmd).startsWith('READ ') ? diskIndex : ''
+      },
+      diskIndex: () => diskIndex,
+    }
+  }
+
+  it('rebuild 输入含 snap-pre-rollback-123 与 snap-abc → 索引只收 abc', async () => {
+    const state = fakeState()
+    const rt = fakeRtRebuild(state, ['snap-abc', 'snap-pre-rollback-123'])
+    const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
+    state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
+
+    await snaps.rebuildOrphans(ROOT, SID)
+
+    expect(state.snapshots.has('abc')).toBe(true)
+    // 安全 tag 只作救援锚点：不进内存索引，更不落盘——否则 time=0 条目会进
+    // 管理列表、占配额、被 retention 当「最旧」优先清掉（救援点随重度使用消失）
+    expect(state.snapshots.has('pre-rollback-123')).toBe(false)
+    const saved = JSON.parse(rt.diskIndex() || '[]')
+    expect(saved.map((e) => e.id)).toEqual(['abc'])
+  })
+
+  it('isSafetySnapshotId 谓词：裸 id 命中、完整 tag 与普通 id 不命中', () => {
+    // 与 routes-manage 展示过滤共用同一谓词——这里钉住边界，防两处判定漂移
+    expect(isSafetySnapshotId('pre-rollback-1700000000000')).toBe(true)
+    expect(isSafetySnapshotId('snap-pre-rollback-1700000000000')).toBe(false) // 完整 tag 名不是 id
+    expect(isSafetySnapshotId('abc')).toBe(false)
+    expect(isSafetySnapshotId('')).toBe(false)
+    expect(isSafetySnapshotId(null)).toBe(false)
+    expect(isSafetySnapshotId(123)).toBe(false)
   })
 })

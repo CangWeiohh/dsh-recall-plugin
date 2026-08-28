@@ -39,6 +39,7 @@ const STORE_SCRIPTS = {
   gcScript: (api) => api.gcScript(FAKE_STORE, 'git-exe'),
   pruneScript: (api) => api.pruneScript(FAKE_STORE, 'git-exe'),
   purgeTagsScript: (api) => api.purgeTagsScript(FAKE_STORE, 'git-exe', ['snap-1']),
+  rescueScript: (api) => api.rescueScript('ROOT', FAKE_STORE, 'git-exe', 'pre-rollback-1'),
 }
 
 describe('脚本模板同名导出契约', () => {
@@ -79,6 +80,13 @@ describe('关键模板结构断言', () => {
       expect(module.killOrphansScript('any/dir')).toContain('RECALL_CLEANUP')
     })
 
+    // F-G2 防回归字面契约：rollbackScript（含内联的 collectListsBlock）里
+    // 禁止裸 ` && ` 链——set -e 下条件为假的 && 列表会杀掉脚本或让 rm 失败
+    // 被静默豁免，半回退假成功报 ROLLBACK_OK、救援永不触发。循环体一律 if/fi。
+    it(`${title}: rollbackScript 不存在裸 ' && ' 链（set -e 循环体约定）`, () => {
+      expect(module.rollbackScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [])).not.toContain(' && ')
+    })
+
     for (const [name, invoke] of Object.entries(STORE_SCRIPTS)) {
       it(`${title}: ${name}(store) 维持 g='<store.git>' 赋值约定`, () => {
         const script = invoke(module)
@@ -92,4 +100,23 @@ describe('关键模板结构断言', () => {
     expect(pwsh.UTF8_PRELUDE.length).toBeGreaterThan(0)
     expect(posix.UTF8_PRELUDE.length).toBeGreaterThan(0)
   })
+})
+
+describe('F-S1 rescue tag 前缀契约（跨函数）', () => {
+  // S1 漏网口：snapshotScript 打 tag 无条件加 snap- 前缀，rescueScript 接受
+  // 完整 tag 名——若调用侧（snapshots.js rescueRollback）忘记拼前缀，reset
+  // 目标必然 unknown revision 且救援 100% 走失败分支。假模板单测测不到这种
+  // 跨函数约定，这里把「snapshotScript 的 tag 命令」与「rescueScript('snap-' + id)
+  // 的 reset 目标」钉成同一个名字，前缀规则漂移即红。
+  for (const [title, module] of [['pwsh', pwsh], ['posix', posix]]) {
+    it(`${title}: snapshotScript 打的 tag 与 rescueScript('snap-'+id) 的 reset 目标同名`, () => {
+      const snap = module.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+      const tagM = snap.match(/tag -f '([^']+)'/)
+      expect(tagM, 'snapshotScript 未找到 tag -f 命令').toBeTruthy()
+      const rescue = module.rescueScript('ROOT', FAKE_STORE, 'git-exe', 'snap-m1')
+      const resetM = rescue.match(/reset --hard '([^']+)'/)
+      expect(resetM, 'rescueScript 未找到 reset --hard 目标').toBeTruthy()
+      expect(resetM[1]).toBe(tagM[1])
+    })
+  }
 })

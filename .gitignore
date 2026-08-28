@@ -3,6 +3,8 @@ node_modules/
 *.log
 reference/
 .codebuddy/
+.zcode/
 AGENTS.md
+codebuddy.md
 docs/plans/
 docs/README.md

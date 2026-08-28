@@ -124,4 +124,22 @@ describe('官方 API 字段探针（dsh 安装目录）', () => {
       expect(src).toMatch(/op:\s*'unset'/)
     })
   })
+
+  describe('ShellRunResult.stdout CollectedOutput（F-G3 索引截断判定依赖）', () => {
+    const p = 'dsh-shell'
+    const f = '/lib/types/types.d.ts'
+    const guard = () => has(p, f)
+
+    probeIf(guard)('ShellRunResult.stdout 是 CollectedOutput（runShellMeta 读取载体）', () => {
+      expect(read(p, f)).toMatch(/stdout:\s*CollectedOutput/)
+    })
+
+    probeIf(guard)('CollectedOutput.truncated 存在（截断可判定，loadIndex 据此区分截断/损坏）', () => {
+      // CollectedOutput 定义住在 dsh-subprocess（dsh-shell re-export）；
+      // 截断时 text 只剩流尾部——这是「截断 ≠ 损坏」分支的官方事实依据
+      const sub = read('dsh-subprocess', '/lib/types/types.d.ts')
+      expect(sub).toMatch(/truncated:\s*boolean/)
+      expect(sub).toMatch(/spillPath\?:/)
+    })
+  })
 })

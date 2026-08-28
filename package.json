@@ -29,8 +29,10 @@
   },
   "scripts": {
     "check:dsh": "node scripts/check-dsh-version.mjs",
+    "build": "node scripts/build-client.mjs",
     "test": "vitest run tests/unit",
-    "test:probe": "vitest run tests/probe"
+    "test:probe": "vitest run tests/probe",
+    "verify:host": "node scripts/verify-host.mjs"
   },
   "dsh": {
     "bundle": {
@@ -57,6 +59,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "esbuild": "^0.28.1",
     "vitest": "^4.1.11"
   }
 }
