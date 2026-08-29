@@ -233,6 +233,18 @@ describe('关键模板结构断言', () => {
     expect(posix.diskUsageScript('any/dir')).toContain('du -sk')
     expect(posix.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])).toContain('find "$root"')
   })
+
+  it('PF-4：storesDumpScript 输出 LINEAGE 段（与 INDEX 段同构，两平台同构）', () => {
+    for (const module of [pwsh, posix]) {
+      const s = module.storesDumpScript('CONTAINER', ['/extra'])
+      for (const marker of ['LINEAGEBEGIN', 'LINEAGEEND', 'INDEXBEGIN', 'INDEXEND', '==DIR ', 'ROOT ']) {
+        expect(s, '缺少标记 ' + marker).toContain(marker)
+      }
+    }
+    // 段内读取的目标文件名
+    expect(pwsh.storesDumpScript('', [])).toContain("'lineage.json'")
+    expect(posix.storesDumpScript('', [])).toContain('"$d/lineage.json"')
+  })
 })
 
 describe('F-S1 rescue tag 前缀契约（跨函数）', () => {
