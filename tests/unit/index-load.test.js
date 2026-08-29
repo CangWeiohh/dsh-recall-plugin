@@ -19,6 +19,8 @@ function fakeState() {
     snapshots: new Map(),
     snapFeedback: new Map(),
     indexLoaded: new Set(),
+    indexHealthy: new Set(),
+    indexTruncated: new Set(),
     stores: new Map(),
     cutSeqCache: new Map(),
     gcLastAt: new Map(),

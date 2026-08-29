@@ -23,6 +23,8 @@ function fakeState() {
     snapshots: new Map(),
     stores: new Map(),
     indexLoaded: new Set(),
+    indexHealthy: new Set(),
+    indexTruncated: new Set(),
     gitExe: 'git-exe',
   }
 }

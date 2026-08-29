@@ -21,6 +21,8 @@ function fakeState() {
     snapshots: new Map(),
     snapFeedback: new Map(),
     indexLoaded: new Set(),
+    indexHealthy: new Set(),
+    indexTruncated: new Set(),
     stores: new Map(),
     cutSeqCache: new Map(),
     gcLastAt: new Map(),
@@ -236,6 +238,99 @@ describe('F-G1 rebuildOrphans 过滤 pre-rollback 条目', () => {
     expect(isSafetySnapshotId('')).toBe(false)
     expect(isSafetySnapshotId(null)).toBe(false)
     expect(isSafetySnapshotId(123)).toBe(false)
+  })
+})
+
+describe('PF-5 rebuildOrphans 四档守卫', () => {
+  // 专用假 rt：loadIndex 走 runShellMeta（终态标记的数据源），rebuildOrphans
+  // 走 runShell（listTagsWithTimeScript 回传 tag 清单）；diskIndex 捕获落盘。
+  function fakeRtGuard(state, { rawIndex, truncated, tags }) {
+    let diskIndex = ''
+    let listCalls = 0
+    const S = {
+      stripBom: (t) => String(t == null ? '' : t).replace(/^\uFEFF/, ''),
+      indexReadCmd: (dir) => 'READ ' + dir,
+      listTagsWithTimeScript: () => 'LISTTAGS',
+    }
+    return {
+      state,
+      isWin: false,
+      scripts: S,
+      resolveGit: async () => 'git-exe',
+      writeTextViaShell: async (file, text) => {
+        if (String(file).endsWith('index.json')) diskIndex = String(text)
+      },
+      runShell: async (cmd) => {
+        if (String(cmd) === 'LISTTAGS') { listCalls++; return tags.join('\n') }
+        return String(cmd).startsWith('READ ') ? diskIndex : ''
+      },
+      runShellMeta: async (cmd) => ({ text: String(cmd).startsWith('READ ') ? rawIndex : '', truncated: Boolean(truncated) }),
+      diskIndex: () => diskIndex,
+      listTagsCalled: () => listCalls,
+      recordError: () => {},
+    }
+  }
+
+  it('truncated（读截断）→ rebuild 整体跳过且不写盘（残缺视图绝不覆盖完好索引）', async () => {
+    const state = fakeState()
+    const rt = fakeRtGuard(state, { rawIndex: JSON.stringify([{ id: 'disk1', time: 1, sessionId: SID }]), truncated: true, tags: ['snap-orphan 1700000000'] })
+    const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
+    state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
+
+    await snaps.loadIndex(ROOT, SID)
+    await snaps.rebuildOrphans(ROOT, SID)
+
+    expect(state.indexTruncated.has(ROOT)).toBe(true)
+    expect(rt.listTagsCalled()).toBe(0)      // 连 tag 清单进程都不起
+    expect(rt.diskIndex()).toBe('')          // 不写盘
+    expect(state.snapshots.size).toBe(0)     // 残缺空视图保持原样
+  })
+
+  it('healthy 且该 root 条目 > 0 → rebuild 跳过（常态 init 零多余进程）', async () => {
+    const state = fakeState()
+    const rt = fakeRtGuard(state, { rawIndex: JSON.stringify([{ id: 'a', time: 1, sessionId: SID }, { id: 'b', time: 2, sessionId: SID }]), truncated: false, tags: ['snap-late 1700000000'] })
+    const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
+    state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
+
+    await snaps.loadIndex(ROOT, SID)
+    await snaps.rebuildOrphans(ROOT, SID)
+
+    expect(state.indexHealthy.has(ROOT)).toBe(true)
+    expect(rt.listTagsCalled()).toBe(0)
+    expect(rt.diskIndex()).toBe('')
+    expect(state.snapshots.size).toBe(2)
+  })
+
+  it('healthy 但条目为 0（磁盘索引为空数组）→ rebuild 照跑（合法重建态）', async () => {
+    const state = fakeState()
+    const rt = fakeRtGuard(state, { rawIndex: '[]', truncated: false, tags: ['snap-abc 1700000000'] })
+    const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
+    state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
+
+    await snaps.loadIndex(ROOT, SID)
+    await snaps.rebuildOrphans(ROOT, SID)
+
+    expect(state.indexHealthy.has(ROOT)).toBe(true)
+    expect(rt.listTagsCalled()).toBe(1)
+    expect(state.snapshots.has('abc')).toBe(true)
+    expect(JSON.parse(rt.diskIndex()).map((e) => e.id)).toEqual(['abc'])
+  })
+
+  it.each([
+    ['empty（无索引文件）', { rawIndex: '', truncated: false }],
+    ['quarantined（损坏隔离）', { rawIndex: '{broken', truncated: false }],
+  ])('%s → rebuild 照跑（自愈链路完整）', async (_label, opt) => {
+    const state = fakeState()
+    const rt = fakeRtGuard(state, { ...opt, tags: ['snap-orphan 1700000000'] })
+    const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
+    state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
+
+    await snaps.loadIndex(ROOT, SID)
+    await snaps.rebuildOrphans(ROOT, SID)
+
+    expect(state.indexHealthy.has(ROOT)).toBe(false)
+    expect(rt.listTagsCalled()).toBe(1)
+    expect(state.snapshots.has('orphan')).toBe(true)
   })
 })
 
