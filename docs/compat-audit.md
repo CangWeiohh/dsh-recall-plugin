@@ -249,6 +249,44 @@
   FIDELITY_ATTRS 两侧同值；改动属性内容须同步换 attrs-v1.stamp 标记名（版本化，
   让存量仓库重新迁移）。
 
+### I27 PS 5.1 stdin 文本读取按输入代码页解码；dsh pwshPath 解析实际常落 PS 5.1（PF-2 探针）
+- **依赖的官方/环境行为**：① PowerShell 5.1（.NET 4.x）的 `[Console]::In` 读重定向
+  stdin 按 `Console.InputEncoding`（中文机器 GBK 936）解码——UTF-8 字节流会乱码
+  （字节数漂移、中文损坏）；官方 `ENCODING_PREAMBLE` 与插件 `UTF8_PRELUDE` 只设
+  `OutputEncoding`，救不了输入侧；`[Console]::InputEncoding` 对重定向 stdin 设置
+  行为不可靠。可靠读取手法是 `[Console]::OpenStandardInput()` 读原始字节 +
+  `UTF8Encoding($false)` 显式解码（与代码页无关，PS 5.1/pwsh 7 双解释器实测
+  逐字节保真）。② dsh-pwsh-local 的 `candidateExists` 用 `lstatSync`+isFile/
+  isSymbolicLink 判存在——WindowsApps 的 pwsh 应用执行别名是 appexeclink
+  reparse point，`lstatSync` 报 ENOENT 判否：本机只装 WindowsApps 别名 pwsh 时
+  **生产口径就是 powershell.exe 5.1**，5.1 兼容性不是兜底考量而是主路径。
+- **出处**：`dsh-pwsh-local/lib/index.js`（ENCODING_PREAMBLE / resolvePwshPath /
+  candidateExists，2026-08-29 构建产物源码）；`dsh-subprocess-local/lib/index.js`
+  （stdin 经 `child.stdin.end(data)`，Node UTF-8 编码）。
+- **探针/单测**：`tests/probe/stdin-write.test.js`（与执行器同 argv 形态 spawn，
+  OpenStandardInput 形态逐字节保真回归钉）；实弹见 plan-performance.md PF-2 探针
+  结论（形态 A Console.In 在 PS 5.1 红的实证）。
+- **失效症状**：若改回 `[Console]::In.ReadToEnd()` 读 stdin——中文机器上
+  index.json/lineage.json/exclude.txt 写入内容乱码、JSON.parse 失败、误走损坏隔离。
+- **复查动作**：dsh 升级后核对执行器 stdin 写侧仍是 `child.stdin.end`（UTF-8）；
+  若未来官方 preamble 加设 InputEncoding 或执行器默认 PS 7 真身，探针仍绿（字节
+  流形态与编码无关），可保持现状。
+
+### I28 SessionHeader 无 title 字段（PF-7 titles 半项废弃依据）
+- **依赖的官方行为**：`SessionHeader` 持久化字段只有 version/id/createdAt/cwd/
+  parentSession/seedLength/origin/delegationDepth/agentPreset——会话标题不在
+  header 里，住在事件日志的 `session/title` 事件（session-info.js
+  titleFromEvents 的既有读取路径）。因此 `listSessions()`（目录级 header 枚举）
+  拿不到冷会话标题，只能拿 id/cwd。
+- **出处**：`dsh-session/lib/types/types.d.ts`（SessionHeader 接口，2026-08-29 核验）。
+- **探针/单测**：`tests/probe/api-surface.test.js` 负向断言（SessionHeader 体内
+  不含 `readonly title`——未来官方加 title 时探针红，提示可重启 titles 优化：
+  冷标题免 readSession 冷读）；header.id 存在的正向断言（sweep 依赖，I8）。
+- **失效症状**：无（titles 半项未实施，维持 readSession 现状）；若未来误按
+  `header.title` 取标题会恒 undefined。
+- **复查动作**：dsh 升级后探针红（官方加了 title）→ 重新实施 plan-performance.md
+  PF-7 的 titles 半项（listSessions 建 id→title Map，冷标题零 readSession）。
+
 ## 与 E1 verify-host 的对应关系
 
 装配层条目（I10 inject 门禁、端点注册、Config schema、卸载清零）由

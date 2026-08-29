@@ -2,6 +2,25 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [Unreleased]
+
+性能优化批次（[plan-performance.md](docs/plans/pending/plan-performance.md) PF-1〜PF-9 全项，2026-08-29）。API 形状与用户可见语义基本不变（PF-6 删除以「所见为准」、PF-1 校验更严两处行为变化见下）；单测 227 → 283 例全绿，合成基准同口径对比：快照管理首开 -70%、对话中二次打开免等待、同进程二次 init ≈0、单条删除 -21%、每条消息快照 -14%。
+
+### 新增
+
+- **预览指纹校验（PF-1，行为变化：校验更严）**：diff/快照脚本输出 `TREE <hash>`（add -A 后 index 树指纹），preview 随清单回传、client 确认时透传——execute 与安全快照指纹比对即知「预览后文件是否变化」，从「条目总数一致」升级为「内容一致」，且一次撤回少跑一整条重复 diff 进程（4 → 3 条重脚本）。老 client 的 `previewTotal` 条目数校验保留为兼容路径。
+- **manage list stale 渐进刷新（PF-6，行为变化：删除以所见为准）**：每条消息快照不再清空列表缓存而是标 stale——对话中打开快照管理立即以旧列表应答（带 `stale` 字段），后台 dump 补新（in-flight 去重），client 静默二段刷新一次；批量删除在缓存非空时以「用户当前所见」的列表为准构造删除范围。
+
+### 变更（性能等价重构，API 形状不变）
+
+- **win32 文本写入改 stdin 单进程（PF-2）**：index.json/lineage.json/exclude.txt/root.txt 落盘从 base64 20000 字符分块（每块一条 PowerShell 进程，索引几百条时 saveIndex 6+ 条）改为 stdin 传全文 + 单进程；POSIX 的内联 cat 一并收进模板同名导出。读取手法由运行时探针钉死（`[Console]::OpenStandardInput()` 字节流——`Console.In` 在 PS 5.1 按输入代码页 GBK 解码 UTF-8 stdin 必挂，且本机 dsh 执行器实际解析到 PS 5.1：pwsh 别名 appexeclink 在 lstat 视角不存在）。
+- **全量枚举换 .NET 手动栈遍历（PF-3）**：超大文件剔除（snapshot/diff/rollback 三脚本各一次，一次撤回共 4 次）与磁盘占用统计改 `Stack[string]` + 逐目录 `EnumerateFiles` + try/catch——.NET 4.x 的 `AllDirectories` 遇 ACL 异常目录中断整个枚举，手动栈才能与 `SilentlyContinue` 逐项容错对齐；几万文件的工作区从数秒级降亚秒。usage 端点多 store 并行（runLimited 4）+ 30s TTL 缓存（删除/gc 后失效）。
+- **lineage 并入 storesDump（PF-4）**：`==DIR` 段内新增 `LINEAGEBEGIN/原文/LINEAGEEND`（与 INDEX 段同构，解析容错），manage lineage 从「每 root 串行一条进程（20 工作区 ≈ 10s）」降为零新增进程。
+- **rebuildOrphans 四档守卫（PF-5）**：索引终态分级（healthy / empty / quarantined / truncated）——healthy 且非空、truncated 时整体跳过重建（顺带根治现有隐患：读截断后残缺内存视图会被无条件 rebuild 用孤儿集覆盖完好大索引）；`cleanupLegacy` 加内存标记（同 root 多次 init 只付一条进程）。init/预热常态每 root 省 1+N 条进程，同进程二次 init 零进程。
+- **sweep 换 listSessions（PF-7）**：gc 前的已删会话扫描从逐会话 `readSession` 全日志解压（串行队列内，会话多时堵住快照/撤回）改为一次 `listSessions()` 目录枚举建 id 集合（I8：记录 id 在 header.id）；判定更保守（日志损坏但文件在的保留，purge 不可逆宁可少清）。titles 冷读维持现状——探针确认 `SessionHeader` 无 `title` 字段，titles 半项废弃（负向探针钉住，官方未来加 title 时提示可重启该优化）。
+- **exclude-get 探测链合并（PF-8）**：全部 exclude 文件一条脚本 base64 读取（任意用户文本免疫定界混淆），首开进程链 4-6 条 → 2 条。
+- **快照脚本瘦身（PF-9）**：exclude 同步条件化（内容未变跳过重写与清理循环，每条消息常态省 1 次 git 子进程 + 1 次盘写，改排除即时生效不变）；update-index 逐条调用合批（pwsh 100 条/批、POSIX xargs -0 自适应），大排除/多超大文件场景子进程 N → N/100。
+
 ## [2.1.1] - 2026-08-29
 
 issue #12 换行符字节保真修复（patch）。单测 227 项全绿，双平台真实模板端到端复验（pwsh 全新/存量迁移 + POSIX 实弹）31 项全过，`check:dsh` 巡检一致。
