@@ -258,6 +258,32 @@ describe('关键模板结构断言', () => {
     expect(posix.excludeDumpScript(files)).toContain('base64 ')
     expect(posix.excludeDumpScript(files)).toContain("tr -d '\\n'")
   })
+
+  it('PF-9：excludeSync 条件化（内容未变跳过重写与清理循环）两侧齐备', () => {
+    // pwsh：逐行比对（Get-Content 剥 BOM/行尾，免疫 5.1 BOM 与 LF/CRLF 差异）
+    const pwshSnap = pwsh.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    expect(pwshSnap).toContain('$same = ($excOld.Count -eq $lines.Count)')
+    expect(pwshSnap).toContain('if (-not $same) {')
+    // posix：命令替换对两侧同样剥尾随换行后比对
+    const posixSnap = posix.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    expect(posixSnap).toContain('if [ "$new_exc" != "$old_exc" ]; then')
+  })
+
+  it('PF-9：update-index 合批（多路径合参，N 次 fork → N/100 或 xargs 自适应）', () => {
+    // pwsh：显式 100 条/批（与 purgeTags 分块同款纪律）
+    const pwshSnap = pwsh.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    expect(pwshSnap).toContain('for ($i = 0; $i -lt $oversizeRel.Count; $i += 100) {')
+    expect(pwshSnap).toContain('for ($i = 0; $i -lt $hit.Count; $i += 100) {')
+    // 旧的逐条 update-index（对单个 $rel / $_ 调用）退役
+    expect(pwshSnap).not.toContain('update-index --force-remove -- $_')
+    expect(pwshSnap).not.toContain("Replace('\\','/')\n        & $git")
+    // posix：xargs -0 自适应批次（空格/中文路径不分裂），excludeSync + oversize 两处
+    const posixSnap = posix.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    expect(posixSnap.match(/xargs -0/g).length).toBe(2)
+    // oversize 侧不再逐条（" $rel" 逐条退役）；dropGitlinks 的逐条 "$p" 是
+    // PF-9 方案明确「保留不动」的（gitlink 常态 0 条，无收益）
+    expect(posixSnap).not.toContain('update-index --force-remove -- "$rel"')
+  })
 })
 
 describe('F-S1 rescue tag 前缀契约（跨函数）', () => {
