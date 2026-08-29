@@ -179,6 +179,45 @@ describe('关键模板结构断言', () => {
       expect(s, title + ' 缺迁移标记文件').toContain('attrs-v1.stamp')
     }
   })
+
+  it('PF-1：diff/snapshot 脚本输出 TREE 行（index 树指纹，execute STALE 比对依据）', () => {
+    const snap = pwsh.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    const diff = pwsh.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [])
+    expect(snap, 'pwsh snapshotScript 缺 TREE 输出').toContain("Write-Output ('TREE ' + $tree)")
+    expect(diff, 'pwsh diffScript 缺 write-tree 探测').toContain('write-tree')
+    expect(diff, 'pwsh diffScript 缺 TREE 输出').toContain("Write-Output ('TREE ' + $tree)")
+    // POSIX 侧形态（echo "TREE $tree"）
+    const pSnap = posix.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    const pDiff = posix.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [])
+    expect(pSnap, 'posix snapshotScript 缺 TREE 输出').toContain('echo "TREE $tree"')
+    expect(pDiff, 'posix diffScript 缺 write-tree 探测').toContain('write-tree')
+    expect(pDiff, 'posix diffScript 缺 TREE 输出').toContain('echo "TREE $tree"')
+  })
+
+  it('PF-1：pwsh diffScript 输出 TOTAL 行且 JSON 截断数由参数注入（不硬编码）', () => {
+    const s = pwsh.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [], 300)
+    expect(s).toContain("Write-Output ('TOTAL ' + $sorted.Count)")
+    expect(s).toContain('Select-Object -First 300')
+    // 缺省 500 兜底（直调模板的安全默认）
+    expect(pwsh.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [])).toContain('Select-Object -First 500')
+    // POSIX 侧无 TOTAL（TSV 全量输出，total 由 JS 侧按解析条数计）
+    expect(posix.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [])).not.toContain('TOTAL')
+  })
+
+  it('PF-3：pwsh 全量枚举换 .NET 手动栈遍历（Get-ChildItem -Recurse 退役）', () => {
+    // PS 5.1 可用的 .NET 4.x 没有 AllDirectories 的 SkipUnavailable——必须
+    // 手动 Stack 逐目录 try/catch 才能与 SilentlyContinue 的逐项容错对齐
+    const snap = pwsh.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+    expect(snap).toContain('[System.Collections.Generic.Stack[string]]::new()')
+    expect(snap).toContain('EnumerateFiles()')
+    expect(snap).not.toContain('Get-ChildItem -LiteralPath $root -Recurse')
+    const usage = pwsh.diskUsageScript('any/dir')
+    expect(usage).toContain('EnumerateFiles()')
+    expect(usage).not.toContain('Get-ChildItem')
+    // POSIX 侧 find/du 本就高效，按计划不动
+    expect(posix.diskUsageScript('any/dir')).toContain('du -sk')
+    expect(posix.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])).toContain('find "$root"')
+  })
 })
 
 describe('F-S1 rescue tag 前缀契约（跨函数）', () => {
