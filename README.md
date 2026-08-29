@@ -18,16 +18,10 @@
 
 ## 界面预览
 
-- 撤回按钮位置
-
-![悬停出现撤回按钮](docs/screenshots/recall-button.png)
-
----
-| 确认面板 · 变更文件清单 | 确认面板 · 回退范围说明 |
+| 撤回按钮 | 确认面板 · 变更文件清单 |
 | --- | --- |
-| ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) | ![确认面板 · 回退范围说明](docs/screenshots/confirm-panel-2.png) |
+| ![悬停出现撤回按钮](docs/screenshots/recall-button.png) |  ![确认面板 · 变更文件清单](docs/screenshots/confirm-panel-1.png) |
 
-- 撤回后自动把消息文本回填到输入框，方便修改后重发（可在设置卡片关闭）
 - 设置页 · 插件配置卡片（配置表单 / 排除表 / 快照管理，保存即热生效）
 
  ![设置页](docs/screenshots/settings-exclude-2.png) 
