@@ -245,6 +245,19 @@ describe('关键模板结构断言', () => {
     expect(pwsh.storesDumpScript('', [])).toContain("'lineage.json'")
     expect(posix.storesDumpScript('', [])).toContain('"$d/lineage.json"')
   })
+
+  it('PF-8：excludeDumpScript 两平台同名——内容 base64 单行传输（任意文本免疫）', () => {
+    const files = ['/a/exclude.txt', '/b/exclude.txt']
+    for (const module of [pwsh, posix]) {
+      const s = module.excludeDumpScript(files)
+      expect(s).toContain('EXCLBEGIN ')
+      expect(s).toContain('EXCLEND')
+    }
+    // pwsh 用 ReadAllBytes+ToBase64String（不碰代码页）；POSIX tr 去折行兼容 GNU/BSD
+    expect(pwsh.excludeDumpScript(files)).toContain('[Convert]::ToBase64String([IO.File]::ReadAllBytes')
+    expect(posix.excludeDumpScript(files)).toContain('base64 ')
+    expect(posix.excludeDumpScript(files)).toContain("tr -d '\\n'")
+  })
 })
 
 describe('F-S1 rescue tag 前缀契约（跨函数）', () => {
