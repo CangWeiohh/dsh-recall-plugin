@@ -16,10 +16,11 @@ import * as posix from '../../lib/scripts.posix.js'
 
 // 与 store.js checkScriptParity 的豁免集保持一致：
 // 平台专属导出（homeDirScript 的 $h 链只在 pwsh 侧需要；probeHomeScript
-// 只在 posix 侧用于 home 基底探测；fileWriteCmd 仅 pwsh 版存在——POSIX
-// 文本落盘走 stdin，不经命令行传参；legacyHomeMigrateScript 仅 posix 版
+// 只在 posix 侧用于 home 基底探测；legacyHomeMigrateScript 仅 posix 版
 // 存在——旧容器迁移是 POSIX 漂移（I24）专属的存量数据兜底）。
-const SKIP = new Set(['homeDirScript', 'probeHomeScript', 'fileWriteCmd', 'legacyHomeMigrateScript'])
+// PF-2 起 fileWriteStdinCmd 两平台同名导出（stdin 单进程落盘），
+// 旧的 pwsh 专属 fileWriteCmd（base64 分块）已整体移除。
+const SKIP = new Set(['homeDirScript', 'probeHomeScript', 'legacyHomeMigrateScript'])
 
 const pwshKeys = Object.keys(pwsh).filter((k) => !SKIP.has(k)).sort()
 const posixKeys = Object.keys(posix).filter((k) => !SKIP.has(k)).sort()
@@ -51,13 +52,27 @@ describe('脚本模板同名导出契约', () => {
 
   it('平台专属导出各自存在且互不越界', () => {
     expect(typeof pwsh.homeDirScript).toBe('function')
-    expect(typeof pwsh.fileWriteCmd).toBe('function')
     expect(pwsh.probeHomeScript).toBeUndefined()
     expect(pwsh.legacyHomeMigrateScript).toBeUndefined()
     expect(typeof posix.probeHomeScript).toBe('function')
     expect(typeof posix.legacyHomeMigrateScript).toBe('function')
     expect(posix.homeDirScript).toBeUndefined()
+    // PF-2：分块写入实现整体移除（回退手段是 git revert，不是运行时分支）
+    expect(pwsh.fileWriteCmd).toBeUndefined()
     expect(posix.fileWriteCmd).toBeUndefined()
+  })
+
+  it('PF-2：fileWriteStdinCmd 两平台同名——pwsh 走探针钉死的字节流形态，posix 是 cat', () => {
+    // pwsh 读取手法由 tests/probe/stdin-write.test.js 实测钉死：
+    // Console.In 在 PS 5.1 按 GBK 解码 UTF-8 stdin（必挂），必须
+    // OpenStandardInput 读原始字节；落盘必须 .NET WriteAllText 无 BOM 重载
+    // （PS 5.1 的 Set-Content -Encoding utf8 必带 BOM）
+    const w = pwsh.fileWriteStdinCmd('some/file.tmp')
+    expect(w).toContain('[Console]::OpenStandardInput()')
+    expect(w).toContain('[IO.File]::WriteAllText($tmp, $text, [Text.UTF8Encoding]::new($false))')
+    expect(w).not.toContain('[Console]::In')
+    expect(w).not.toContain('Set-Content')
+    expect(posix.fileWriteStdinCmd('some/file.tmp')).toBe("cat > 'some/file.tmp'")
   })
 
   for (const key of pwshKeys) {
