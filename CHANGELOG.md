@@ -2,9 +2,9 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
-## [Unreleased]
+## [2.2.0] - 2026-08-30
 
-性能优化批次（[plan-performance.md](docs/plans/completed/plan-performance.md) PF-1〜PF-9 全项，2026-08-29）。API 形状与用户可见语义基本不变（PF-6 删除以「所见为准」、PF-1 校验更严两处行为变化见下）；单测 227 → 283 例全绿，合成基准同口径对比：快照管理首开 -70%、对话中二次打开免等待、同进程二次 init ≈0、单条删除 -21%、每条消息快照 -14%。
+性能优化批次（[plan-performance.md](docs/plans/completed/plan-performance.md) PF-1〜PF-9 全项，2026-08-29 实施，同日实弹冒烟 9/9 通过）。API 形状与用户可见语义基本不变（PF-6 删除以「所见为准」、PF-1 校验更严两处行为变化见下）；单测 227 → 283 例全绿，`verify:host` 装配门禁、`check:dsh` 巡检、client 产物新鲜度全绿；合成基准同口径对比：快照管理首开 -70%、对话中二次打开免等待、同进程二次 init ≈0、单条删除 -21%、每条消息快照 -14%。
 
 ### 新增
 
@@ -20,6 +20,10 @@
 - **sweep 换 listSessions（PF-7）**：gc 前的已删会话扫描从逐会话 `readSession` 全日志解压（串行队列内，会话多时堵住快照/撤回）改为一次 `listSessions()` 目录枚举建 id 集合（I8：记录 id 在 header.id）；判定更保守（日志损坏但文件在的保留，purge 不可逆宁可少清）。titles 冷读维持现状——探针确认 `SessionHeader` 无 `title` 字段，titles 半项废弃（负向探针钉住，官方未来加 title 时提示可重启该优化）。
 - **exclude-get 探测链合并（PF-8）**：全部 exclude 文件一条脚本 base64 读取（任意用户文本免疫定界混淆），首开进程链 4-6 条 → 2 条。
 - **快照脚本瘦身（PF-9）**：exclude 同步条件化（内容未变跳过重写与清理循环，每条消息常态省 1 次 git 子进程 + 1 次盘写，改排除即时生效不变）；update-index 逐条调用合批（pwsh 100 条/批、POSIX xargs -0 自适应），大排除/多超大文件场景子进程 N → N/100。
+
+### 修复
+
+- **后台刷新与 dump 失败留痕**：`refreshListCacheInBackground` 与 `dumpStores` 失败原先被 silent catch 完全吞掉（实弹冒烟中曾出现一次约 29 分钟列表 stale 未自愈且零日志可查），现补 console 留痕——复发时看「recall list refresh failed」/「recall stores dump failed」即可定位。
 
 ## [2.1.1] - 2026-08-29
 
