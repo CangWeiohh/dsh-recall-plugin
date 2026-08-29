@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-性能优化批次（[plan-performance.md](docs/plans/pending/plan-performance.md) PF-1〜PF-9 全项，2026-08-29）。API 形状与用户可见语义基本不变（PF-6 删除以「所见为准」、PF-1 校验更严两处行为变化见下）；单测 227 → 283 例全绿，合成基准同口径对比：快照管理首开 -70%、对话中二次打开免等待、同进程二次 init ≈0、单条删除 -21%、每条消息快照 -14%。
+性能优化批次（[plan-performance.md](docs/plans/completed/plan-performance.md) PF-1〜PF-9 全项，2026-08-29）。API 形状与用户可见语义基本不变（PF-6 删除以「所见为准」、PF-1 校验更严两处行为变化见下）；单测 227 → 283 例全绿，合成基准同口径对比：快照管理首开 -70%、对话中二次打开免等待、同进程二次 init ≈0、单条删除 -21%、每条消息快照 -14%。
 
 ### 新增
 
