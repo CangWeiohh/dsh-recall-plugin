@@ -2,6 +2,32 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [2.1.0] - 2026-08-29
+
+改进专项与审查修复、环境诊断批次（错误治理 / POSIX home 三档 / 并发治理）、双平台实弹冒烟（Windows + WSL2 Ubuntu 26.04）后发版。单测 224 项、官方 API 探针、`verify:host`、`check:dsh` 全绿。
+
+### 新增
+
+- **回退失败救援闭环**（H1）：rollback 未输出 ROLLBACK_OK（工作区可能半回退）时，用 execute 预先打下的安全快照（`snap-pre-rollback-<ts>`）自动 reset 回「回退前」状态，提示含「已自动恢复」；救援也失败时给出可直接复制执行的手动命令（空格路径已实弹验证）。
+- **索引原子写与损坏隔离**（H2）：index.json/lineage.json 走 tmp+rename 原子写；内容损坏或形状非法时 fail-loud——坏文件改名 `.corrupt-<ts>` 保留现场并告警，孤儿从 tag 重建（时间从 tag creatordate 恢复），不再静默当空。
+- **错误码单一事实源**（H3）：`lib/errors.js` 收敛 18 个错误码；无快照撤回 / STALE / AGENT_BUSY 三场景的 client 文案与按钮行为对齐。
+- **client 多文件化**（R1）：`src/client/` 源码 + esbuild 打包（产物 `lib/client.js` 随源码提交），CI 钉产物新鲜度（F-G6）。
+- **Host 路由域拆分**（R2）：routes-core / routes-manage / session-info 三域，全部 API 可直调。
+- **fork lineage 持久化**（F1）：lineage.json 记录撤回链（childId↔parentId），快照管理按链分组展示。
+- **verify-host 装配门禁**（E1）：复刻生产装配做结构断言（兄弟提供者桩 + agents 行为），装配回归发版前即可拦截。
+- **环境错误分类与可行动提示**（M1）：快照失败按 git 缺失 / 磁盘满 / 无权限 / 锁冲突 / mkdir 冲突分类，toast 与设置页「最近错误」共用同一套可行动中文文案（≤140 字符、不含原始路径）；同一错误相邻重复合并 ×N 计数。
+- **POSIX home 三档回退与旧容器迁移**（M2）：bash `$DSH_HOME` → Node `DSH_HOME` → `~/.dsh`（第三档补齐 `.dsh` 层，修复快照误落 `~/dsh-recall-snapshots` 的 I24 漂移）；旧根级容器首次启动整容器自动迁移（MIGRATE_OK / OLD_ABSENT / BOTH_PRESENT / MIGRATE_FAIL 四态，数据不丢永远优先于路径规范）。
+- **并发治理**（M3）：store 心跳文件（宿主 PID + epoch 秒，随每次快照/建库刷新）；失败清扫三级让路——另一活实例使用中让路（`CLEANUP_OTHER_INSTANCE`，win32 `Get-Process` / POSIX `kill -0` 探活）→ 5 分钟内新锁让路（`CLEANUP_SKIPPED_FRESH_LOCK`）→ 照常清扫（`CLEANUP_DONE`），根治 issue #11 双实例互踩死循环。
+
+### 修复
+
+- **PS 5.1 降级环境读编码**：index.json/lineage.json 读取显式 `-Encoding UTF8`——pwsh-local 解析链降级到 PS 5.1 时按 ANSI 活动代码页解码无 BOM UTF-8，中文 root 乱码 → 好索引被误判 corrupt 隔离（双平台实弹复现）。
+- **双实例并发写索引的 tmp-rename 竞态**：并发 saveIndex 时一方 rename 把 `.tmp` 消费掉，另一方报「No such file」刷错误——写侧完整成功后 rename 阶段的 ENOENT 视同成功（同伴已原子落盘），不再进用户错误列表（WSL2 双实例实弹复现）。
+- **冷启动首消息快照丢失**（ensureGit init 竞态）：首条消息与启动预热并发时两个 `git init` 同跑，输家 `fatal: cannot mkdir: File exists`——POSIX 版改为 HEAD 复查放行同伴、真失败带诊断退出（WSL2 实弹复现）。
+- **孤儿重建条目 time=0**：重建快照时间从 tag creatordate 恢复——此前重建后管理列表时间前缀缺失、retention/条数上限按「最旧」误清真实快照。
+- **救援链路前缀契约**（F-S1，严重）：rescue tag 忘拼 `snap-` 前缀导致 reset 目标必然 unknown revision、救援 100% 走失败分支——修复后救援首次真正生效（实弹验证含空格路径）。
+- 其余审查修复：rebuildOrphans 过滤安全 tag（F-G1）、POSIX rollback 删除侧 rm 失败响亮退出（F-G2）、loadIndex 读截断与损坏区分（F-G3）、errors 测试门禁补强（F-G4）、verify-host 复刻生产装配（F-G5）、产物新鲜度 CI 门禁（F-G6）及 A1-A8 改进项。
+
 ## [2.0.0] - 2026-08-26
 
 P0 防线（撤回防护/时效校验）、P1 工程化（单测/探针/CI）、设置页体验改造与新增四项配置、转向指令消息撤回修复。发版前活体冒烟（浏览器自动化 + 真实 dsh web）通过。

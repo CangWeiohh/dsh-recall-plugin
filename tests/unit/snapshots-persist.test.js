@@ -13,7 +13,8 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { createSnapshots, isSafetySnapshotId } from '../../lib/snapshots.js'
+import { createSnapshots, isSafetySnapshotId, parseTagsWithTime } from '../../lib/snapshots.js'
+import { ENV_HINTS } from '../../lib/diagnostics.js'
 
 function fakeState() {
   return {
@@ -82,9 +83,10 @@ describe('P1-2 feedback 持久化', () => {
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
     // 注：带 feedback 的 failed 条目当前不会由 saveIndex 产生（见上例），
-    // 此处钉读取端防御——手工编辑/未来版本写入的索引仍被正确回填。
+    // 此处钉读取端防御——手工编辑/未来版本写入的索引仍被正确回填。kind
+    // （M1 环境错误分类）随对象保留，重启后 status hint 不失效。
     const idx = JSON.stringify([
-      { id: 'm-fail', time: 1000, root: ROOT, sessionId: SID, feedback: { failed: true, error: 'boom' } },
+      { id: 'm-fail', time: 1000, root: ROOT, sessionId: SID, feedback: { failed: true, error: 'boom', kind: 'lock' } },
       { id: 'm-skip', time: 2000, root: ROOT, sessionId: SID, feedback: { skipped: ['a/'] } },
       { id: 'm-ok', time: 3000, root: ROOT, sessionId: SID },
     ])
@@ -95,7 +97,7 @@ describe('P1-2 feedback 持久化', () => {
 
     await snaps.loadIndex(ROOT, SID)
 
-    expect(state.snapFeedback.get('m-fail')).toEqual({ failed: true, error: 'boom' })
+    expect(state.snapFeedback.get('m-fail')).toEqual({ failed: true, error: 'boom', kind: 'lock' })
     expect(state.snapFeedback.get('m-skip')).toEqual({ skipped: ['a/'] })
     expect(state.snapFeedback.has('m-ok')).toBe(false)
   })
@@ -172,13 +174,14 @@ describe('P1-2 feedback 持久化', () => {
 })
 
 describe('F-G1 rebuildOrphans 过滤 pre-rollback 条目', () => {
-  // 专用假 rt：listTagsScript 回传指定 tag 清单，writeTextViaShell 捕获落盘索引
+  // 专用假 rt：listTagsWithTimeScript 回传「tag名 秒级时间戳」清单，
+  // writeTextViaShell 捕获落盘索引
   function fakeRtRebuild(state, tags) {
     let diskIndex = ''
     const S = {
       stripBom: (t) => String(t == null ? '' : t).replace(/^\uFEFF/, ''),
       indexReadCmd: (dir) => 'READ ' + dir,
-      listTagsScript: () => 'LISTTAGS',
+      listTagsWithTimeScript: () => 'LISTTAGS',
     }
     return {
       state,
@@ -196,20 +199,33 @@ describe('F-G1 rebuildOrphans 过滤 pre-rollback 条目', () => {
     }
   }
 
-  it('rebuild 输入含 snap-pre-rollback-123 与 snap-abc → 索引只收 abc', async () => {
+  it('rebuild 输入含 snap-pre-rollback-123 与 snap-abc → 索引只收 abc，且 time 从 creatordate 恢复', async () => {
     const state = fakeState()
-    const rt = fakeRtRebuild(state, ['snap-abc', 'snap-pre-rollback-123'])
+    const rt = fakeRtRebuild(state, ['snap-abc 1700000000', 'snap-pre-rollback-123 1700000001'])
     const snaps = createSnapshots({ sessions: { get: () => null } }, rt, { baseExcludes: [] })
     state.stores.set(ROOT, { dir: '/store', git: '/store/git/.git' })
 
     await snaps.rebuildOrphans(ROOT, SID)
 
     expect(state.snapshots.has('abc')).toBe(true)
+    // time 从 tag creatordate 恢复（秒→毫秒）：time=0 会让管理列表时间
+    // 前缀缺失、retention/limits 按「最旧」误清
+    expect(state.snapshots.get('abc').time).toBe(1700000000000)
     // 安全 tag 只作救援锚点：不进内存索引，更不落盘——否则 time=0 条目会进
     // 管理列表、占配额、被 retention 当「最旧」优先清掉（救援点随重度使用消失）
     expect(state.snapshots.has('pre-rollback-123')).toBe(false)
     const saved = JSON.parse(rt.diskIndex() || '[]')
     expect(saved.map((e) => e.id)).toEqual(['abc'])
+  })
+
+  it('parseTagsWithTime：正常行/坏时间行/空行/无空格行', () => {
+    expect(parseTagsWithTime('snap-a 1700000000\nsnap-b notanumber\n\nsnap-c')).toEqual([
+      { name: 'snap-a', time: 1700000000000 },
+      { name: 'snap-b', time: null },
+      { name: 'snap-c', time: null },
+    ])
+    expect(parseTagsWithTime('')).toEqual([])
+    expect(parseTagsWithTime(null)).toEqual([])
   })
 
   it('isSafetySnapshotId 谓词：裸 id 命中、完整 tag 与普通 id 不命中', () => {
@@ -220,5 +236,60 @@ describe('F-G1 rebuildOrphans 过滤 pre-rollback 条目', () => {
     expect(isSafetySnapshotId('')).toBe(false)
     expect(isSafetySnapshotId(null)).toBe(false)
     expect(isSafetySnapshotId(123)).toBe(false)
+  })
+})
+
+describe('M1 环境错误诊断接线（captureSnapshot 两个失败入口）', () => {
+  // M1 主线的组装层钉子（纯函数测试覆盖不到）：ensureGit 失败 → 分类 →
+  // snapFeedback 写入——此前该分支静默 return，客户端空轮询 20 次零提示。
+  it('ensureGit 失败 → snapFeedback 写入分类后的可行动提示（不再静默）', async () => {
+    const state = fakeState()
+    const rt = {
+      state,
+      resolveRoot: async () => ROOT,
+      resolveStore: async () => ({ dir: '/store', git: '/store/git/.git' }),
+      tryUpgradeToHome: async (root) => state.stores.get(root),
+      ensureGit: async () => ({ ok: false, error: 'error: could not lock config file /home/kevin/dsh-recall-snapshots/x/git/.git/config: File exists' }),
+      scripts: {},
+    }
+    const snaps = createSnapshots({ get: () => null }, rt, { baseExcludes: [] })
+
+    await snaps.captureSnapshot(SID, 'm-lock', 1000)
+
+    const fb = state.snapFeedback.get('m-lock')
+    expect(fb.failed).toBe(true)
+    expect(fb.kind).toBe('lock')
+    expect(fb.error).toBe(ENV_HINTS.lock)
+    expect(fb.error.length).toBeLessThanOrEqual(140)
+  })
+
+  it('snapshotScript 失败 → 同样走分类（此处钉根因优先级：报错面是 add fatal、根因是磁盘满）', async () => {
+    const state = fakeState()
+    const rt = {
+      state,
+      resolveRoot: async () => ROOT,
+      resolveStore: async () => ({ dir: '/store', git: '/store/git/.git' }),
+      tryUpgradeToHome: async (root) => state.stores.get(root),
+      ensureGit: async () => ({ ok: true }),
+      scripts: {
+        stripBom: (t) => String(t == null ? '' : t).replace(/^\uFEFF/, ''),
+        indexReadCmd: (dir) => 'READ ' + dir,
+        snapshotScript: () => 'SNAP',
+      },
+      runShellMeta: async () => ({ text: '', truncated: false }),
+      runShell: async (cmd) => {
+        if (String(cmd) === 'SNAP') throw new Error('git add fatal (exit 2): No space left on device')
+        return ''
+      },
+      recordError: () => {},
+    }
+    const snaps = createSnapshots({ get: () => null }, rt, { baseExcludes: [] })
+
+    await snaps.captureSnapshot(SID, 'm-space', 1000)
+
+    const fb = state.snapFeedback.get('m-space')
+    expect(fb.failed).toBe(true)
+    expect(fb.kind).toBe('space')
+    expect(fb.error).toBe(ENV_HINTS.space)
   })
 })

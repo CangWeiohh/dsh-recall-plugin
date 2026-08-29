@@ -154,7 +154,7 @@
 - **出处**：`lib/store.js` posixHomeBaseResolve（bash env → Node 主进程 env → os.homedir()）。
 - **探针/单测**：无直接探针；冒烟「POSIX 下快照存对 home」覆盖。
 - **失效症状**：快照存错 home 目录（或降级到项目内）。
-- **复查动作**：确认 dsh-subprocess 仍洗刷 DSH_* 变量；三档回退顺序仍正确。
+- **复查动作**：确认 dsh-subprocess 仍洗刷 DSH_* 变量；三档回退顺序仍正确；第三档落点为 `homedir/.dsh`（I24，勿回退成裸 homedir）。
 
 ### I19 快照索引两段式补全：manage list 字段补全 + messageTexts null 缓存
 - **依赖的官方行为**：`sessionQuery.readSession` 冷读整日志解压很贵（10 秒级），快照管理
@@ -194,6 +194,35 @@
 - **探针/单测**：无直接探针；冒烟「跨工作区快照树形归组正确」覆盖。
 - **失效症状**：树形一级节点落「未知工作区」，批量删除按工作区/会话匹配不到。
 - **复查动作**：确认 store 目录仍是 root 的单向哈希（磁盘反查 root 依赖 root.txt/index）。
+
+### I24 POSIX home 三级回退第三档缺失 .dsh 子目录（issue #11 修复）
+- **依赖的官方行为**：win32 第三档是 `Join-Path USERPROFILE .dsh`；POSIX 版曾直接用
+  裸 `os.homedir()`，两平台第三档布局不一致，快照落 `~/dsh-recall-snapshots` 而非
+  `~/.dsh/dsh-recall-snapshots`（issue #11 截图实证）。
+- **出处**：`lib/store.js` selectPosixHomeBase / resolvePosixHomeBase（第三档补 `/.dsh`
+  + 旧容器一次性迁移四态编排）vs `lib/scripts.pwsh.js` homeDirScript；迁移模板
+  `lib/scripts.posix.js` legacyHomeMigrateScript。
+- **探针/单测**：`tests/unit/store-path.test.js`（三分支 + 迁移四态 + 模板形状）。
+- **失效症状**：POSIX 快照落 `~/dsh-recall-snapshots`；改 base 而无迁移时存量用户
+  「看不到」历史快照。
+- **复查动作**：改 POSIX home 解析链时核对第三档仍拼 `/.dsh`；legacyHomeMigrateScript
+  四态输出未漂移（MIGRATE_OK/OLD_ABSENT/BOTH_PRESENT/MIGRATE_FAIL）；parity SKIP
+  集合三处（store.js checkScriptParity、scripts-contract.test.js）仍含该平台专属导出。
+
+### I25 失败清扫分级：心跳 + 新锁保护活跃实例（issue #11 根因治理）
+- **依赖的官方行为**：POSIX `kill -0` / win32 `Get-Process -Id` 探活；`find -mmin` 与
+  `.LastWriteTime` 的 mtime 判定；心跳文件内容为「宿主 PID + epoch 秒」ASCII 单行
+  （pwsh 侧必须 ascii 编码——utf8 会带 BOM 破坏 POSIX 侧首字段解析）。
+- **出处**：`lib/scripts.pwsh.js` / `lib/scripts.posix.js` killOrphansScript（三级出口
+  CLEANUP_OTHER_INSTANCE / CLEANUP_SKIPPED_FRESH_LOCK / CLEANUP_DONE）+
+  ensureGitScript/snapshotScript 的 heartbeatBlock 写入 + `lib/store.js`
+  parseCleanupResult / cleanupAfterGitFailure。
+- **探针/单测**：`tests/unit/diagnostics.test.js`（parseCleanupResult + 接线）+
+  `tests/unit/scripts-contract.test.js`（出口标记、心跳接线、STALE_LOCK_MIN /
+  HEARTBEAT_TTL_S 两侧同值）。
+- **失效症状**：多实例互踩死循环回归（清扫误杀对方活跃 git → 对方也失败 → 循环）。
+- **复查动作**：改锁清单或阈值时两侧常量必须同步；心跳写保持 fail-open（不连累
+  快照主流程）；parseCleanupResult 的标记名与模板输出逐字一致。
 
 ## 与 E1 verify-host 的对应关系
 

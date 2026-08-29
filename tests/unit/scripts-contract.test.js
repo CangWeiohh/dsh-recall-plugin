@@ -17,8 +17,9 @@ import * as posix from '../../lib/scripts.posix.js'
 // 与 store.js checkScriptParity 的豁免集保持一致：
 // 平台专属导出（homeDirScript 的 $h 链只在 pwsh 侧需要；probeHomeScript
 // 只在 posix 侧用于 home 基底探测；fileWriteCmd 仅 pwsh 版存在——POSIX
-// 文本落盘走 stdin，不经命令行传参）。
-const SKIP = new Set(['homeDirScript', 'probeHomeScript', 'fileWriteCmd'])
+// 文本落盘走 stdin，不经命令行传参；legacyHomeMigrateScript 仅 posix 版
+// 存在——旧容器迁移是 POSIX 漂移（I24）专属的存量数据兜底）。
+const SKIP = new Set(['homeDirScript', 'probeHomeScript', 'fileWriteCmd', 'legacyHomeMigrateScript'])
 
 const pwshKeys = Object.keys(pwsh).filter((k) => !SKIP.has(k)).sort()
 const posixKeys = Object.keys(posix).filter((k) => !SKIP.has(k)).sort()
@@ -36,6 +37,7 @@ const STORE_SCRIPTS = {
   diffScript: (api) => api.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', []),
   rollbackScript: (api) => api.rollbackScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', []),
   listTagsScript: (api) => api.listTagsScript(FAKE_STORE, 'git-exe'),
+  listTagsWithTimeScript: (api) => api.listTagsWithTimeScript(FAKE_STORE, 'git-exe'),
   gcScript: (api) => api.gcScript(FAKE_STORE, 'git-exe'),
   pruneScript: (api) => api.pruneScript(FAKE_STORE, 'git-exe'),
   purgeTagsScript: (api) => api.purgeTagsScript(FAKE_STORE, 'git-exe', ['snap-1']),
@@ -51,7 +53,9 @@ describe('脚本模板同名导出契约', () => {
     expect(typeof pwsh.homeDirScript).toBe('function')
     expect(typeof pwsh.fileWriteCmd).toBe('function')
     expect(pwsh.probeHomeScript).toBeUndefined()
+    expect(pwsh.legacyHomeMigrateScript).toBeUndefined()
     expect(typeof posix.probeHomeScript).toBe('function')
+    expect(typeof posix.legacyHomeMigrateScript).toBe('function')
     expect(posix.homeDirScript).toBeUndefined()
     expect(posix.fileWriteCmd).toBeUndefined()
   })
@@ -99,6 +103,55 @@ describe('关键模板结构断言', () => {
   it('两侧 UTF8_PRELUDE 非空（编码前导是 runShell 统一前置注入的契约）', () => {
     expect(pwsh.UTF8_PRELUDE.length).toBeGreaterThan(0)
     expect(posix.UTF8_PRELUDE.length).toBeGreaterThan(0)
+  })
+
+  // M3：清扫分级常量两侧必须同值——阈值漂移会让两平台对「多活跃实例」的
+  // 保护窗口不一致（一侧让路一侧误杀，等于没治）。
+  it('两侧 M3 常量同值（STALE_LOCK_MIN / HEARTBEAT_TTL_S）', () => {
+    expect(pwsh.STALE_LOCK_MIN).toBe(posix.STALE_LOCK_MIN)
+    expect(pwsh.HEARTBEAT_TTL_S).toBe(posix.HEARTBEAT_TTL_S)
+  })
+
+  it('killOrphansScript 三级出口标记两侧齐备', () => {
+    for (const module of [pwsh, posix]) {
+      const s = module.killOrphansScript('any/dir')
+      for (const marker of ['RECALL_CLEANUP', 'CLEANUP_OTHER_INSTANCE', 'CLEANUP_SKIPPED_FRESH_LOCK', 'CLEANUP_DONE']) {
+        expect(s, '缺少出口标记 ' + marker).toContain(marker)
+      }
+    }
+  })
+
+  it('心跳写入接线：ensureGit/snapshot 两个模板都写 heartbeat（清扫判定的时间源）', () => {
+    for (const module of [pwsh, posix]) {
+      expect(module.ensureGitScript(FAKE_STORE, 'git-exe', []), 'ensureGitScript 缺心跳写入').toContain('heartbeat')
+      expect(module.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', []), 'snapshotScript 缺心跳写入').toContain('heartbeat')
+      // diff/rollback 不写心跳是有意的：回退前必有安全快照刷新心跳，预览窗口
+      // 由新锁分级兜底（见 plan-env-diagnostics M3 实施记录）
+      expect(module.diffScript('ROOT', FAKE_STORE, 'git-exe', 'snap-1', [])).not.toContain('heartbeat')
+    }
+  })
+
+  it('ensureGitScript（posix）init 竞态容忍：HEAD 复查放行同伴、真失败 exit 1 带诊断', () => {
+    // WSL 实弹发现：冷启动首消息与预热并发时两个 git init 同跑，输家
+    // fatal: cannot mkdir File exists → 首条消息快照丢失。模板必须「init
+    // 失败后复查 $g/HEAD，同伴建成则继续，否则带 stderr exit 1」。
+    const s = posix.ensureGitScript(FAKE_STORE, 'git-exe', [])
+    expect(s).toContain('if [ ! -f "$g/HEAD" ]; then')
+    expect(s).toContain('init_log=$("$git" init "$repo" 2>&1) || {')
+    expect(s).toContain('exit 1')
+    // 不允许退回裸 init（失败即中断、无复查）
+    expect(s).not.toContain('|| "$git" init')
+  })
+
+  it('listTagsWithTimeScript 两侧输出契约：for-each-ref 带 creatordate:unix', () => {
+    // rebuildOrphans 从 tag creatordate 恢复快照时间（time=0 改进）——
+    // 两侧格式必须逐字对齐（snapshots.js parseTagsWithTime 按同一形状解析）
+    for (const module of [pwsh, posix]) {
+      const s = module.listTagsWithTimeScript(FAKE_STORE, 'git-exe')
+      expect(s).toContain('for-each-ref')
+      expect(s).toContain('%(refname:short) %(creatordate:unix)')
+      expect(s).toContain('refs/tags/snap-*')
+    }
   })
 })
 
