@@ -2,6 +2,14 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [2.2.1] - 2026-08-30
+
+快照管理消息内容显示修复（patch）。单测 283 → 285 例全绿，`verify:host` 装配门禁、`check:dsh` 巡检全绿。
+
+### 修复
+
+- **冷会话快照只显示消息 ID（1.5.0 引入）**：manage list 的去重补全分支把 live 未命中的 `null` 写进 `messageText` 属性，client 凭「属性存在」判定「已查过」而跳过 messages 端点冷读——冷会话（已关闭、不在 live 注册表）的快照永远显示消息 ID 截断而非消息内容（同会话标题因 titles 链按 falsy 重查而不受影响）。改为 live 命中才写字段，与首次入库分支的既有纪律对齐；修复后冷会话快照的消息内容经 messages 端点冷读渐进补齐（同会话多条共享一次 readSession，确认无文本的缓存 null 不重复解压）。
+
 ## [2.2.0] - 2026-08-30
 
 性能优化批次（[plan-performance.md](docs/plans/completed/plan-performance.md) PF-1〜PF-9 全项，2026-08-29 实施，同日实弹冒烟 9/9 通过）。API 形状与用户可见语义基本不变（PF-6 删除以「所见为准」、PF-1 校验更严两处行为变化见下）；单测 227 → 283 例全绿，`verify:host` 装配门禁、`check:dsh` 巡检、client 产物新鲜度全绿；合成基准同口径对比：快照管理首开 -70%、对话中二次打开免等待、同进程二次 init ≈0、单条删除 -21%、每条消息快照 -14%。

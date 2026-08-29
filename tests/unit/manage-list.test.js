@@ -55,3 +55,34 @@ describe('F-G1 manage list 过滤 pre-rollback 条目', () => {
     expect(res.items.map((i) => i.id)).toEqual(['xyz'])
   })
 })
+
+// client fetchMessages 以 hasOwnProperty('messageText') 决定是否请求
+// messages 端点冷读——Host 侧任何路径把 null 写进该属性（1.5.0 b8d39cb
+// push 补全分支的回归），冷会话快照就永远只显示消息 ID。
+describe('manage list messageText 字段存在性（client 冷读契约）', () => {
+  it('冷会话条目经磁盘+内存双源后仍不携带 messageText 属性', async () => {
+    const memory = new Map()
+    memory.set('m1', { root: 'D:/ws', time: 2, sessionId: 's-cold' })
+    const routes = createRoutesManage(fakeDumps(
+      [{ id: 'm1', time: 2, sessionId: 's-cold' }],
+      memory
+    ))
+
+    const res = await routes.manage({ op: 'list' })
+
+    expect(res.items).toHaveLength(1)
+    expect(Object.prototype.hasOwnProperty.call(res.items[0], 'messageText')).toBe(false)
+  })
+
+  it('live 命中的条目携带文本，双源补全不覆盖已有值', async () => {
+    const memory = new Map()
+    memory.set('m2', { root: 'D:/ws', time: 2, sessionId: 's-live' })
+    const deps = fakeDumps([{ id: 'm2', time: 2, sessionId: 's-live' }], memory)
+    deps.sessionInfo.liveMessageTextFast = (sid, mid) => (mid === 'm2' ? '你好' : null)
+    const routes = createRoutesManage(deps)
+
+    const res = await routes.manage({ op: 'list' })
+
+    expect(res.items[0].messageText).toBe('你好')
+  })
+})
