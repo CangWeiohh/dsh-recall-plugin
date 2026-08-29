@@ -88,6 +88,25 @@ describe('官方 API 字段探针（dsh 安装目录）', () => {
     })
   })
 
+  describe('SessionHeader 字段形状（PF-7 探针：titles 半项废弃依据）', () => {
+    // SessionHeader 定义住在 dsh-session（corpus.d.ts 只是 re-import）
+    const p = 'dsh-session'
+    const f = '/lib/types/types.d.ts'
+    const guard = () => has(p, f)
+
+    probeIf(guard)('header.id 存在（sweep 判定只依赖 id 的形状前提）', () => {
+      const m = read(p, f).match(/interface SessionHeader \{[\s\S]*?\n\}/)
+      expect(m).toBeTruthy()
+      expect(m[0]).toMatch(/readonly id:\s*SessionId/)
+    })
+
+    probeIf(guard)('header 不含 title（2026-08-29 PF-7 前置核验：冷标题无法走 listSessions，titles 半项废弃；未来若加 title 本探针红，提示可重启 titles 优化）', () => {
+      const m = read(p, f).match(/interface SessionHeader \{[\s\S]*?\n\}/)
+      expect(m).toBeTruthy()
+      expect(m[0]).not.toMatch(/readonly title/)
+    })
+  })
+
   describe('AgentRegistry / AgentStatus（P0-1 依赖）', () => {
     const p = 'dsh-agent'
     const guardA = () => has(p, '/lib/types/index.d.ts')

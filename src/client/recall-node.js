@@ -242,11 +242,14 @@ export function buildRecallNode(React, util, ctx, sessionsSvc, workspacesSvc) {
           setRecall({ stage: 'error', message: messageFor(res, '无法获取快照') })
           return
         }
+        // PF-1：treeId 是 preview 时的 index 树指纹，确认时透传回 execute——
+        // Host 与安全快照指纹比对判 STALE，省一次重复 diff
         setRecall({
           stage: 'confirm',
           changes: res.changes || [],
           total: typeof res.total === 'number' ? res.total : (res.changes || []).length,
           truncated: Boolean(res.truncated),
+          treeId: res.treeId || null,
           time: res.time || null,
           cutSeq: typeof res.cutSeq === 'number' ? res.cutSeq : null
         })
@@ -262,9 +265,11 @@ export function buildRecallNode(React, util, ctx, sessionsSvc, workspacesSvc) {
       // P0-3：携带预览摘要（total 是完整计数，与 Host 侧 diffFor 的 total
       // 对齐；changes 截断到 500 条，不能用来比对）。Host 端据此在 execute
       // 时校验「预览后文件集是否变化」，变了则返回 STALE 拒绝执行。
+      // PF-1：新版同时透传 previewTreeId（内容级指纹），Host 优先用它比对
+      // 且免一次重复 diff；老 Host 忽略未知字段自动退回 total 校验。
       const previewTotal = typeof recall.total === 'number' ? recall.total : changes.length
       setRecall({ stage: 'executing', changes })
-      api('execute', { messageId, sessionId, previewTotal, previewAt: Date.now() }).then(async (res) => {
+      api('execute', { messageId, sessionId, previewTotal, previewTreeId: recall.treeId || undefined, previewAt: Date.now() }).then(async (res) => {
         if (!res || !res.ok) {
           // STALE：预览后文件变了——自动重新拉一次最新清单回到确认阶段
           if (res && res.code === 'STALE') {
@@ -279,6 +284,7 @@ export function buildRecallNode(React, util, ctx, sessionsSvc, workspacesSvc) {
                 changes: res2.changes || [],
                 total: typeof res2.total === 'number' ? res2.total : (res2.changes || []).length,
                 truncated: Boolean(res2.truncated),
+                treeId: res2.treeId || null,
                 time: res2.time || null,
                 cutSeq: typeof res2.cutSeq === 'number' ? res2.cutSeq : null
               })
