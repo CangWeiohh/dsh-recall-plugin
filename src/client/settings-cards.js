@@ -206,6 +206,19 @@ export function buildSettingsCards(React, util, sessionsSvc) {
           setTotal(typeof res.total === 'number' ? res.total : (res.items || []).length)
           fetchTitles(res.items || [])
           fetchMessages(res.items || [])
+          // PF-6：stale 表示响应来自旧缓存、有新快照未入列表——静默再拉
+          // 一次让新快照渐进补上。再拉仍 stale 时止步不更新（不循环，防
+          // 抖动），等用户下次手动刷新。
+          if (res.stale) {
+            api('manage', { op: 'list', limit: useLimit }).then((res2) => {
+              if (res2 && res2.ok && !res2.stale) {
+                setItems(res2.items || [])
+                setTotal(typeof res2.total === 'number' ? res2.total : (res2.items || []).length)
+                fetchTitles(res2.items || [])
+                fetchMessages(res2.items || [])
+              }
+            }).catch(() => {})
+          }
         }
         // F1：加载 fork lineage（版本家族），列表成功后异步补齐，不阻塞首屏
         api('manage', { op: 'lineage' }).then((res) => {
