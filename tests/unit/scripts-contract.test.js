@@ -153,6 +153,32 @@ describe('关键模板结构断言', () => {
       expect(s).toContain('refs/tags/snap-*')
     }
   })
+
+  it('ensureGitScript 固化 info/attributes 字节保真（issue #12）', () => {
+    // git archive/add 都会应用快照树里项目自己的 .gitattributes——影子仓库
+    // 必须用 info/attributes（最高优先级属性源）一票否决，否则 text=auto
+    // 项目回退后 LF 变 CRLF（issue #12 实证）。两侧常量必须逐字同值，
+    // 且 ensureGitScript 必须把该内容写进 info/attributes。
+    expect(pwsh.FIDELITY_ATTRS).toBe(posix.FIDELITY_ATTRS)
+    expect(pwsh.FIDELITY_ATTRS).toContain('-text')
+    for (const [title, module] of [['pwsh', pwsh], ['posix', posix]]) {
+      const s = module.ensureGitScript(FAKE_STORE, 'git-exe', [])
+      expect(s, title + ' 缺 info/attributes 固化内容').toContain(module.FIDELITY_ATTRS)
+      expect(s, title + ' 未写 attributes 文件').toContain('attributes')
+    }
+  })
+
+  it('snapshotScript 含一次性 renormalize 迁移（issue #12 存量归一化）', () => {
+    // 属性固化后旧索引条目仍指向归一化 blob，stat 缓存时序依赖地跳过重哈希
+    // ——需要 --renormalize 一次性迁移；无 pathspec 的 renormalize 是空操作
+    // （实测），必须带 ':(top)' 顶层魔法 pathspec，且有标记文件防重复。
+    for (const [title, module] of [['pwsh', pwsh], ['posix', posix]]) {
+      const s = module.snapshotScript('ROOT', FAKE_STORE, 'git-exe', 'm1', [])
+      expect(s, title + ' 缺 --renormalize').toContain('--renormalize')
+      expect(s, title + ' 缺 :(top) 魔法 pathspec').toContain('\':(top)\'')
+      expect(s, title + ' 缺迁移标记文件').toContain('attrs-v1.stamp')
+    }
+  })
 })
 
 describe('F-S1 rescue tag 前缀契约（跨函数）', () => {

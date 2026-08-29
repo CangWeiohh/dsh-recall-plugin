@@ -224,6 +224,31 @@
 - **复查动作**：改锁清单或阈值时两侧常量必须同步；心跳写保持 fail-open（不连累
   快照主流程）；parseCleanupResult 的标记名与模板输出逐字一致。
 
+### I26 影子仓库固化 info/attributes 字节保真（issue #12 修复）
+- **依赖的官方行为**：`git archive` 与 `git add` 都应用「快照树里项目自己的
+  .gitattributes」——`text=auto` + 缺省 `core.eol=native`（Windows 即 CRLF）会让
+  archive 解包把 LF 转 CRLF，仓库级 `core.autocrlf=false` 挡不住（属性驱动的转换
+  看 core.eol，不看 autocrlf，实测）。`$GIT_DIR/info/attributes` 是优先级最高的
+  属性源，对全部路径一票否决树内与全局属性。另两个实测细节：`git add
+  --renormalize` 无 pathspec 是空操作（必须 `-- ':(top)'` 顶层魔法 pathspec，
+  且不能加 --literal-pathspecs）；属性变更后裸 add -A 受 stat 缓存影响时序依赖
+  地跳过重哈希（racy 复查只覆盖「add 与文件同秒写入」），存量归一化条目需要
+  显式 renormalize 迁移。
+- **出处**：`lib/scripts.pwsh.js` / `lib/scripts.posix.js` FIDELITY_ATTRS 常量 +
+  ensureGitScript 的 info/attributes 固化 + snapshotScript 的 attrsMigrateBlock
+  （一次性 renormalize，标记文件 attrs-v1.stamp，失败不 throw 保快照主流程）。
+- **探针/单测**：`tests/unit/scripts-contract.test.js`（两侧常量逐字同值、固化行、
+  renormalize + ':(top)' + 迁移标记）；issue #12 分析的实验矩阵与真实模板端到端
+  复验（2026-08-29，本机 system autocrlf=true + 恶意 .gitattributes，16 项全过）。
+- **失效症状**：text=auto / eol=crlf 项目回退后换行符漂移（LF↔CRLF 双向失真，
+  capture 侧归一化 + restore 侧反向转换）；`export-ignore` 声明让文件从回退归档
+  静默消失（快照有、恢复无、零报错）；clean filter / $Id$ / working-tree-encoding
+  改写恢复内容。
+- **复查动作**：git 升级后复核 info/attributes 优先级仍高于树内 .gitattributes、
+  archive 仍应用属性转换（若 git 未来改为「archive 不做转换」，固化即冗余无害）；
+  FIDELITY_ATTRS 两侧同值；改动属性内容须同步换 attrs-v1.stamp 标记名（版本化，
+  让存量仓库重新迁移）。
+
 ## 与 E1 verify-host 的对应关系
 
 装配层条目（I10 inject 门禁、端点注册、Config schema、卸载清零）由

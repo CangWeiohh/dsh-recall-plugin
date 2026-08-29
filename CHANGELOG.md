@@ -2,6 +2,14 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [2.1.1] - 2026-08-29
+
+issue #12 换行符字节保真修复（patch）。单测 227 项全绿，双平台真实模板端到端复验（pwsh 全新/存量迁移 + POSIX 实弹）31 项全过，`check:dsh` 巡检一致。
+
+### 修复
+
+- **快照/回退换行符失真（issue #12）**：影子仓库固化为字节保真语义——`info/attributes`（`FIDELITY_ATTRS`）对全部路径关闭 EOL 转换、clean filter、`$Id$` 展开、`export-ignore`/`export-subst`、`working-tree-encoding`。根因是 `git archive`（回退恢复路径）与 `git add`（捕获路径）都会应用快照树里项目自己的 `.gitattributes`：`text=auto` + Windows 缺省 `core.eol=native` 会把 LF 转 CRLF，仓库级 `core.autocrlf=false` 挡不住（属性驱动的转换看 `core.eol`）。存量归一化索引经一次性 `git add --renormalize -- ':(top)'` 迁移（标记文件 `attrs-v1.stamp` 防重复，迁移失败不阻塞快照）。连带修复 `export-ignore` 声明让文件从回退归档中静默消失的同类缺口。注意：回退到本版之前的旧快照仍会还原归一化内容（旧 blob 信息已物理丢失），本版起的新快照字节保真。
+
 ## [2.1.0] - 2026-08-29
 
 改进专项与审查修复、环境诊断批次（错误治理 / POSIX home 三档 / 并发治理）、双平台实弹冒烟（Windows + WSL2 Ubuntu 26.04）后发版。单测 224 项、官方 API 探针、`verify:host`、`check:dsh` 全绿。
