@@ -2,6 +2,17 @@
 
 本文件格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循语义化版本。
 
+## [2.3.0] - 2026-08-31
+
+修复批次：适配 dsh 0.1.2 / 0.1.2-alpha.2（兼容 0.1.1-rc.2）。单测 285 例全绿，`verify:host` 装配门禁、`check:dsh` 巡检、`test:probe` 探针全绿；新旧两版 DSH（0.1.1-rc.2 / 0.1.2-alpha.2，Windows）实弹验证通过——撤回按钮、设置页「撤回插件」卡片、快照删除均正常。
+
+### 修复
+
+- **dsh 0.1.2-alpha 下撤回按钮与设置卡片全部消失（I29）**：0.1.2 的 client 服务层大迁移（`client/runtime` 包删除，slots 迁入 ui-renderer、sessions/workspaces 迁入新增的 api 包）后，插件 fiber 未声明 inject 时 `ctx.get('slots')` 解析不到服务、静默返回 undefined，apply 首行 `if (!slots) return` 即退出：CSS 不注入、slot 全部不注册、entry 仍 active（无任何报错，症状为「Host 活 Client 死」）。修复：client 插件对象声明 `inject: ['slots', 'sessions', 'workspaces', 'timer']` 并改为 `ctx.<name>` 属性访问（styles 服务 0.1.2 已移除，保留 `ctx.get` 可选探测 + `<style>` 降级）。**双版本兼容**（0.1.1-rc.2 ↔ 0.1.2，cordis 4.0.1 实测）：`conversation` 服务 0.1.2 才存在，静态声明会让 0.1.1-rc.2 上插件「声明未满足」静默不启动（UI 全灭），故不进 inject，统一走 `ctx.get('conversation')` 探测 + 降级（0.1.1-rc.2 上回填输入框功能本来就不存在；0.1.2 主流程不受影响）。同批受影响的第三方插件可参照 compat-audit I29 自查。
+- **dsh 0.1.2-alpha.2 适配（I30 + 事件 ignorable 恢复）**：① Host settings 接入路径破坏性变更——独立函数 `installSettingsSection` 被官方移除、改为 `SettingsProvider.installSection` 方法（bash-local/pwsh-local 同款迁移），静态 import 会让插件 Host 半启动即崩（`SyntaxError: does not provide an export named 'installSettingsSection'`，`/api/recall/*` 全 404）。修复：`lib/index.js` 改命名空间导入 + 双版本兼容分支（旧版走独立函数、新版走 `ctx.inject(['settings'])` + `installSection`），verify-host 桩补 installSection。② 事件信封 `ignorable?: true` 在 alpha.2 恢复（alpha.1 曾移除改 fail-closed）——插件只扫 `user/message` + `turn/end`、不读 ignorable，无影响，契约文档同步。③ `conversation.chat.node` 声明包定位更新（ui-chat），`test:probe` 探针改双包探测，17/17 全绿。
+- **快照管理「已删除但列表仍在」**：列表/批量删除按 index.json 条目里的 root 匹配，但历史坏数据曾在写入时丢失路径反斜杠（如 `D:workspacedsh-plugin冒烟测试工作区`，正确应为 `D:\workspace\dsh-plugin\冒烟测试工作区`）——store 目录 hash 按正确 root 计算，删除按坏 root 解析到**空 store**，真快照 tag 一个没删，却仍返回匹配条数的 deleted 计数（用户看到「已删除 N 条」但列表原样）。修复：列表构建与批量删除的 root 来源**优先取 root.txt 权威值**（`resolveStore` 每次写入），index.json 条目 root 仅作兜底——三处读取点（`buildListItems` / `collectAllSnapshotRecords` / `locateSnapshotOnDisk`）同步修正；磁盘上重复 hash 的坏 store 一并消失，实弹验证删除真正生效（33 条全删、列表从 36 降到 2）。
+- **旧版 0.1.1-rc.2 下设置页不显示「撤回插件」卡片（撤回功能正常）**：插件 node_modules 里 `@deepseek-ai/dsh-settings` 固定为最新版（0.1.2-alpha.2，只有 `installSection` 方法），旧版 DSH 注入的却是旧版 settings 实例（仅 `register` 核心 API）——兼容分支只看静态导入包判断（`installSettingsSection` 不存在 → 走 `ctx.inject` + `installSection`），旧版实例无此方法抛 TypeError，被 catch 静默吞掉（仅进 `recordError` 环形缓冲，`/api/recall/status` 可查），namespace 从未注册、设置卡片缺失。修复：`lib/index.js` 设置接线改为**按运行时注入实例的实际 API 分派**——`installSection` 方法（0.1.2-alpha.2）或 `register` 核心 API（0.1.1-rc.2 及以前，手动复刻独立函数接线语义：注册 namespace、源指向 scope、卸载回退入口 config、watch 热更新）。旧版实弹验证：`/api/recall/status` errors 为空，设置页「插件配置」出现完整「撤回插件」卡片（快照开关/gc 阈值/文件上限/回填/归档/排除表/快照管理）。
+
 ## [2.2.1] - 2026-08-30
 
 快照管理消息内容显示修复（patch）。单测 283 → 285 例全绿，`verify:host` 装配门禁、`check:dsh` 巡检全绿。

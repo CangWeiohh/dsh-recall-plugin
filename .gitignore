@@ -9,3 +9,7 @@ codebuddy.md
 docs/plans/
 docs/README.md
 .mimosa/
+.playwright-cli/
+plugins.yaml
+recall-settings.yaml
+settings.yaml

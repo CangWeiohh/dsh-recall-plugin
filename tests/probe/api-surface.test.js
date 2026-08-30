@@ -35,24 +35,31 @@ describe('官方 API 字段探针（dsh 安装目录）', () => {
   const has = (pkg, rel) => fs.existsSync(path.join(PKG(pkg), rel))
 
   describe('chat.node slot props（issue #9 钉子）', () => {
-    const p = 'dsh-client-ui-conversation'
-    const f = '/lib/types/client/contract/slots.d.ts'
-    const guard = () => has(p, f)
+    // 0.1.2-alpha.2 起声明迁至 dsh-client-ui-chat（ui-chat 包名），旧版在
+    // dsh-client-ui-conversation（0.1.2-alpha.1 及以前）。双路径任一命中即验
+    // 证——探针跟着官方包布局走，避免升级后误红。
+    const chat = { p: 'dsh-client-ui-chat', f: '/lib/types/client/contract/slots.d.ts' }
+    const conv = { p: 'dsh-client-ui-conversation', f: '/lib/types/client/contract/slots.d.ts' }
+    const find = () => (has(chat.p, chat.f) ? chat : has(conv.p, conv.f) ? conv : null)
+    const guard = () => Boolean(find())
 
     probeIf(guard)('renderMessageImages 是官方字段（曾读不存在的 loadImage）', () => {
-      const src = read(p, f)
-      expect(src).toMatch(/renderMessageImages/)
+      const { p, f } = find()
+      expect(read(p, f)).toMatch(/renderMessageImages/)
       // 契约明确剔除 loadImage——`Omit<MessageImagesOwnerProps, 'loadImage'>`
       // 是「渲染入口只有 renderMessageImages」的机器化表达；单匹配 loadImage
-      // 会被字面量误放行（字面量作为被 Omit 剔除的名字也存在），必须匹配整型
-      expect(src).toMatch(/Omit<MessageImagesOwnerProps,\s*'loadImage'>/)
+      // 会被字面量误放行（字面量作为被 Omit 剔除的名字也存在），必须匹配整型。
+      // RenderMessageImages 类型定义现居 ui-conversation（chat 包仅 re-export）
+      expect(read(conv.p, conv.f)).toMatch(/Omit<MessageImagesOwnerProps,\s*'loadImage'>/)
     })
 
     probeIf(guard)('node 字段存在（消息节点渲染 props 的官方命名）', () => {
+      const { p, f } = find()
       expect(read(p, f)).toMatch(/node:\s*ChatNode</)
     })
 
     probeIf(guard)('cwd 字段存在（会话工作区路径显示契约）', () => {
+      const { p, f } = find()
       expect(read(p, f)).toMatch(/cwd\??:\s*string/)
     })
   })

@@ -14,14 +14,20 @@ import { buildSettingsCards } from './settings-cards.js'
 
 export function createApp(React) {
   return function apply(ctx) {
-    const slots = ctx.get('slots')
+    // 0.1.2 起 client runner 用 guard facade 包 ctx：只有插件对象 inject 数组
+    // 声明过的服务才可经 ctx.<name> 属性访问（跨 scope 解析由 cordis inject
+    // 机制完成）；ctx.get() 在新作用域下拿不到 slots 等服务，会静默拿到
+    // undefined——必须声明式访问（见 entry.js 的 inject 清单）。
+    const slots = ctx.slots
     if (!slots) return
     // 官方会话服务：fork 到已完成 turn 前缀 + open 切到新会话；
     // workspaces 的归档只是从列表隐藏、可恢复，用来收走回退前的原会话。
-    const sessionsSvc = ctx.get('sessions')
-    const workspacesSvc = ctx.get('workspaces')
+    const sessionsSvc = ctx.sessions
+    const workspacesSvc = ctx.workspaces
 
-    // 静态 bundle 的 ctx 可能不提供 styles 服务，降级为直接注入 <style>
+    // styles 服务 0.1.2 已不存在（CSS 由官方打包管道按 materialize 注入，
+    // 本插件是手写常量注入），保留 get 探测 + <style> 降级——get 对缺失服务
+    // 安全返回 undefined，不会像未声明的属性访问那样抛守卫错误。
     const stylesSvc = ctx.get('styles')
     if (stylesSvc && typeof stylesSvc.insert === 'function') {
       stylesSvc.insert(CSS)

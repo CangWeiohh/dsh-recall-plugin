@@ -126,6 +126,10 @@ export function buildRecallNode(React, util, ctx, sessionsSvc, workspacesSvc) {
     let attempts = 0
     const attempt = () => {
       try {
+        // conversation 服务 0.1.2 才有（0.1.1-rc.2 无，ui-conversation 提供），
+        // 不能进静态 inject——否则 0.1.1-rc.2 上声明缺失服务插件静默不启动。
+        // 走 ctx.get 探测：guard 的 get 对缺失/未声明服务安全返回 undefined，
+        // 拿不到就降级重试（0.1.1-rc.2 恒降级；0.1.2 视服务可见性而定）。
         const conversation = ctx.get('conversation')
         if (conversation && conversation.input && typeof conversation.input.shell === 'function') {
           const shell = conversation.input.shell(targetSessionId)
@@ -225,7 +229,8 @@ export function buildRecallNode(React, util, ctx, sessionsSvc, workspacesSvc) {
       if (copied) return
       writeClipboard(text).then(() => {
         setCopied(true)
-        const timer = ctx.get('timer')
+        // timer 同经 inject 声明属性访问；未就绪时降级裸 setTimeout。
+        const timer = ctx.timer
         if (timer && typeof timer.timeout === 'function') {
           timer.timeout(() => setCopied(false), 1200)
         } else {

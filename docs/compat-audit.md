@@ -5,14 +5,18 @@
 > 核对「出处」是否漂移，替代全文重读 AGENTS.md。AGENTS.md「已知坑」保留为一行一条
 > 索引，细节住这里，避免双写漂移。
 >
-> 出处标注为 2026-08-28 核验；每次 dsh 升级后按「复查动作」更新本节「核验日期」。
+> 出处标注为 2026-08-30 核验；每次 dsh 升级后按「复查动作」更新本节「核验日期」。
+>
+> **0.1.2-alpha.2 核验（2026-08-31）**：新增 I30（settings 辅助函数移除）；
+> I1/I2/I4/I5 的 chat.node 出处均为 ui-chat 包（探针已改双包探测）；事件信封
+> `ignorable` 在 alpha.2 恢复（§1.3，插件不读无影响）；其余矩阵条目复查无漂移。
 
 ## 矩阵
 
 ### I1 conversation.chat.node keyed slot：负值 priority + 冲突递减重试
 - **依赖的官方行为**：keyed slot（key=`user`）不指定 priority 会因与默认渲染器同 key
   冲突而拒载整个插件；负值 priority 覆盖默认实现。
-- **出处**：`dsh-client-ui-conversation` slot 注册契约（slots.d.ts / ChatNodeSeat.d.ts）。
+- **出处**：slot 注册契约（0.1.2-alpha.1 迁包：`dsh-client-ui-chat` 的 contract/slots.d.ts；0.1.1-rc.2 在 `dsh-client-ui-conversation`，声明内容逐字段一致）。
 - **探针/单测**：无直接探针（client 加载契约，见 I13）；冒烟「撤回按钮出现」覆盖。
 - **失效症状**：插件白屏/整体拒载，或撤回按钮不渲染。
 - **复查动作**：核对 keyed slot 冲突语义与 priority 覆盖规则未变；`['user','steering']`
@@ -21,8 +25,8 @@
 ### I2 chat.node props：只有 renderMessageImages，无 loadImage
 - **依赖的官方行为**：`renderMessageImages({ images: [{attachment}], align })` 是图片
   渲染唯一入口；`loadImage` 被 `Omit<MessageImagesOwnerProps,'loadImage'>` 明确剔除。
-- **出处**：`dsh-client-ui-conversation/lib/types/client/contract/slots.d.ts`
-  （`Omit<MessageImagesOwnerProps,'loadImage'>`）。
+- **出处**：`dsh-client-ui-chat/lib/types/client/contract/slots.d.ts`
+  （`Omit<MessageImagesOwnerProps,'loadImage'>`；0.1.2-alpha.1 由 ui-conversation 迁入，字段不变）。
 - **探针/单测**：`tests/probe/api-surface.test.js`（renderMessageImages 存在 + Omit 整型匹配）。
 - **失效症状**：图片永久无声空白（issue #9：读不存在的 loadImage，守卫 return，零报错）。
 - **复查动作**：重跑 test:probe；确认 images 仍传 image 块数组（非裸 attachment）。
@@ -37,7 +41,7 @@
 
 ### I4 消息节点 id：node.id 是快照主键，node.key 是位置键
 - **依赖的官方行为**：`node.id` 是真实消息 ID；`node.key` 是位置键（如 `13:input`）。
-- **出处**：`dsh-client-ui-conversation` ChatNode 类型。
+- **出处**：`dsh-client-ui-chat` ChatNode 类型（0.1.2-alpha.1 迁入，`node.id`/`node.key` 语义不变）。
 - **探针/单测**：无直接探针；冒烟「撤回 → 文件恢复正确」覆盖。
 - **失效症状**：快照查询永远 miss，撤回按钮永不出现或撤回错消息。
 - **复查动作**：确认 ChatNode.id 语义未变（仍为消息 ID）。
@@ -45,7 +49,7 @@
 ### I5 chat.node keyed key 与 UI 投影 kind 对齐（user + steering）
 - **依赖的官方行为**：agent 运行中插入的转向指令投影为 `steering`（非 `user`），存储层
   `role` 恒 user；只注册 `key:'user'` 时 steering 节点落到官方默认渲染、撤回按钮缺失。
-- **出处**：`dsh-client-ui-conversation` 投影 kind 定义。
+- **出处**：`dsh-client-ui-chat` 投影 kind 定义（0.1.2-alpha.1 迁入；完整 ChatNodeKind 全集见 dsh-contract.md §1.1，含新增 `context` 键）。
 - **探针/单测**：无直接探针；冒烟「agent 运行中转向指令带撤回按钮」覆盖。
 - **失效症状**：转向指令消息无撤回按钮（静默缺失）。
 - **复查动作**：确认 UI 投影 kind 集合未新增需覆盖的键。
@@ -53,15 +57,21 @@
 ### I6 sessions.fork：不传 increaseTitle（标题「xxx 2」回归钉）
 - **依赖的官方行为**：`fork({ sessionId, atSeq?, increaseTitle? }) → Promise<SessionId>`；
   `increaseTitle` 会把子会话标题改为「xxx 2」并递增。
-- **出处**：`dsh-client-runtime/lib/types/client/contract/sessions.d.ts` L90-94。
+- **出处**：`dsh-api-session-controller/lib/types/client/contract/sessions.d.ts` L97
+  （0.1.2-alpha.1 由 `dsh-client-runtime` 迁入该新包；fork 签名与 0.1.1-rc.2 逐字段一致）。
 - **探针/单测**：`tests/probe/api-surface.test.js`（fork 签名 + increaseTitle 可选）。
 - **失效症状**：撤回后标题变「xxx 2」且多次撤回递增。
-- **复查动作**：确认 fork 签名未变、increaseTitle 仍可选；本项目仍不传它。
+- **复查动作**：确认 fork 签名未变、increaseTitle 仍可选；本项目仍不传它。另注：
+  reference/09-architecture.md 的 Host 侧文档写 `ctx.sessions.fork(source, boundary?,
+  childSessionId?)`（2026-08-30 镜像），与 client 侧对象参数契约为不同层签名；本项目
+  撤回走 client 侧 `fork({ sessionId, atSeq })`，勿按 Host 文档改 client 调用（探针钉
+  client 形态）。
 
 ### I7 archiveSession 语义：归档 = 从分组表面隐藏（F1 lineage 链断裂根因）
 - **依赖的官方行为**：`archiveSession(sessionId)` 把会话移入 registry-global set，
   **hidden from grouping surfaces**（日志与记账槽保留）。
-- **出处**：`dsh-client-runtime/lib/types/client/contract/workspaces.d.ts` L89-94。
+- **出处**：`dsh-api-workspace-controller/lib/types/client/contract/`（0.1.2-alpha.1 由
+  `dsh-client-runtime` 迁入该新包）。
 - **探针/单测**：无直接探针；F1 用 Host 记录 fork lineage 绕过该限制。
 - **失效症状**：纯 client 侧从 sessions.list 读不到已归档中间版本的 parentId。
 - **复查动作**：确认 archiveSession 仍「隐藏但保留日志」；若改为可列举，F1 可简化。
@@ -286,6 +296,75 @@
   `header.title` 取标题会恒 undefined。
 - **复查动作**：dsh 升级后探针红（官方加了 title）→ 重新实施 plan-performance.md
   PF-7 的 titles 半项（listSessions 建 id→title Map，冷标题零 readSession）。
+
+### I29 Client 插件必须声明式 inject + 属性访问服务（0.1.2 服务作用域重组，UI 全消失实证）
+- **依赖的官方行为**：client runner 用 `dynamicCordisContext`
+  （`cordis-client-runner/src/client/guard.ts`）包插件 apply 收到的 ctx——属性
+  访问 `ctx.<service>` 只对插件对象 `inject` 数组声明过的服务做跨 scope 解析；
+  `ctx.get(name)` 虽不做声明检查，但解析结果取决于服务在插件 fiber 作用域内
+  是否可见。**guard 门禁 0.1.1-rc.2 已存在且语义相同**（0.1.2 仅把 import 从
+  `dsh-client-runtime` 换成 `dsh-client-ui-renderer`，guard.ts/runtime.ts/
+  index.ts 其余零变更）；真正触发失效的是 **0.1.2 的 client 服务层大迁移**：
+  `client/runtime` 包整体删除，slots 服务迁入 `ui-renderer`、sessions 迁入
+  `api/session-controller`（新包）、workspaces 迁入 `api/workspace-controller`
+  （新包）——未声明 inject 的插件 fiber 在新拓扑下经 `ctx.get('slots')` 解析
+  不到服务（返回 undefined）。0.1.1-rc.2 时 slots 由同作用域的 client/runtime
+  提供，`ctx.get('slots')` 可用。**升级后未声明式改造的插件 apply 首行
+  `if (!ctx.get('slots')) return` 静默退出**：CSS 不注入、slot 全部不注册、
+  entry 仍 active（apply 无异常），页面无任何失败提示。同批第三方插件
+  （better-sidebar、archive-manager）同样消失，dshmarket 活着是因为它本来就
+  声明 `inject: ['slots','locale','theme']`。
+- **出处**：`cordis-client-runner/src/client/guard.ts`（dynamicCordisContext/
+  readService：属性访问 requireDeclaration=true、get=false；guardedSlots 对
+  keyed 等 shadowing kind **强制 allocatePriority 覆盖插件传入的 priority**，
+  「later registrations sort first」——插件侧 priority 冲突递减重试循环失效
+  但无害）；官方 denyRead 教学语明确要求
+  `{ inject: ['slots', …], apply(ctx) { … } }`。cordis 4 对「inject 声明未满足」
+  的语义见 `cordis-client-runner/src/client/runtime.ts` L390-394（「Settled but
+  not active = legal pending on an unsatisfied declaration」）与
+  `@deepseek-ai/cordis` Fiber._checkImpl（服务不可得即不启动、不报错）。
+- **探针/单测**：无直接探针（浏览器端行为，CI 外）。修复以实弹验证钉：CSS
+  `<style data-plugin="dsh-recall-plugin">` 注入 + 设置卡渲染 + 撤回按钮 DOM
+  （2026-08-30 dsh 0.1.2-alpha.1 link 模式全过）。
+- **双版本兼容（2026-08-31 cordis 4.0.1 实测钉）**：修复的 inject 清单为
+  `['slots','sessions','workspaces','timer']`——**不含 `conversation`**：
+  conversation 服务 0.1.2 才存在（ui-conversation `service.ts` 提供，
+  0.1.1-rc.2 无），静态声明它会让 0.1.1-rc.2 上的插件走「声明未满足」路径
+  静默不启动（fiber settled 但 apply 不执行，UI 全灭且无报错——与 I29 症状
+  相同但成因不同）；故 conversation 统一走 `ctx.get('conversation')` 探测 +
+  降级（guard 的 get 对缺失服务安全返回 undefined；0.1.1-rc.2 上回填输入框
+  功能本来就不存在，0.1.2 主流程不受影响）。
+- **失效症状**：本插件 UI 全部消失（按钮 + 设置卡），无报错无声息；Host 半
+  API 正常（`/api/recall/*` 200）——「Host 活 Client 死」即此症。
+- **复查动作**：dsh 升级后核对 guard.ts 的门禁语义是否放宽（get 恢复跨 scope
+  或声明要求变化）；插件 `src/client/entry.js` 的 inject 清单与官方 client 域
+  服务清单比对（声明缺失服务会让 fiber 静默不启动——styles 已从声明剔除、
+  conversation 走 get 探测）；0.1.2 之后若 conversation 成为两端稳定服务，
+  可重新评估是否进 inject；guard 的 slots register 优先级覆盖策略若改回尊重
+  插件值，可恢复 priority 重试循环的原始语义。
+
+### I30 settings 独立辅助函数移除：installSettingsSection → SettingsProvider.installSection（0.1.2-alpha.2 破坏性变更实证）
+- **依赖的官方行为**：Host 侧 settings namespace 接入路径随版本迁移——0.1.2-alpha.1
+  及以前用独立导出 `installSettingsSection(ctx, ns, schema, entry, hooks)`；
+  0.1.2-alpha.2 起独立函数**移除**，改为 `SettingsProvider` 实例方法
+  `installSection(owner, ns, schema, entry, hooks)`（owner 是调用插件 ctx），
+  官方 bash-local / pwsh-local 同款写法 `ctx.inject(['settings'], sctx => sctx.settings.installSection(...))`。
+- **出处**：已装 0.1.2-alpha.2 产物 `dsh-settings/lib/index.js`（导出面仅
+  `SettingsConflictError`/`SettingsProvider`/`redactSecrets`，无 installSettingsSection）vs
+  alpha.1 镜像 `settings/settings/lib/index.js:638`（仍导出）。两个签名逐字段一致
+  （entry 为组合 base、hooks 为 setSource/onChange/validate）。
+- **探针/单测**：无静态探针（import 到不存在的命名导出会直接 SyntaxError，探针
+  读 .d.ts 也不覆盖）；`verify:host` 装配门禁在升级后必红并给出此症状——插件
+  `lib/index.js` 静态 import 即崩。已做双版本兼容分支
+  （`typeof dshSettings.installSettingsSection === 'function'` 走旧函数，否则走
+  `ctx.inject(['settings'])` + `installSection`），verify-host 桩补 installSection。
+- **失效症状**：插件 Host 半启动即崩——SyntaxError `does not provide an export
+  named 'installSettingsSection'`，`/api/recall/*` 全 404，UI 按钮可能报 snapshot
+  失败。若 npm 版与本地并行（本机曾装 alpha.1 未发 npm），新旧并存时此症状
+  只出现在新 dsh 环境。
+- **复查动作**：dsh 升级后 `npm run verify:host` 必跑；若官方再次调整接入路径
+  （如 installSection 改名/改签名），同步兼容分支与 verify-host 桩。
+
 
 ## 与 E1 verify-host 的对应关系
 
