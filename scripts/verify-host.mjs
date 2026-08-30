@@ -114,6 +114,12 @@ await ctx.plugin({
       writable: true,
       async update() {},
       async replace() {},
+      // 0.1.2-alpha.2 起插件走 settings.installSection（独立函数被官方移除）；
+      // 桩实现注册语义的最小面：setSource 接入口 config、onChange 触发一次。
+      installSection(owner, ns, schema, entry, hooks) {
+        if (hooks && typeof hooks.setSource === 'function') hooks.setSource(() => entry)
+        if (hooks && typeof hooks.onChange === 'function') hooks.onChange()
+      },
     })
   },
 }, {})
