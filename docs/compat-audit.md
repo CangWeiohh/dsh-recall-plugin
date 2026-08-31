@@ -10,6 +10,20 @@
 > **0.1.2-alpha.2 核验（2026-08-31）**：新增 I30（settings 辅助函数移除）；
 > I1/I2/I4/I5 的 chat.node 出处均为 ui-chat 包（探针已改双包探测）；事件信封
 > `ignorable` 在 alpha.2 恢复（§1.3，插件不读无影响）；其余矩阵条目复查无漂移。
+>
+> **0.1.2-alpha.3 核验（2026-09-01）**：对照官方 release（117 commit）逐条评估，
+> 本版本无插件破坏性变更——
+> 1. **移除 SQLite Session 持久化后端**（`refactor(session)!`，breaking）为存储层裁剪：
+>    删除 `dsh-session-persistence-sqlite`，仅留 JSONL provider；插件走 `ctx.sessions`
+>    服务契约面（fork/open/search/list），不依赖持久化后端实现，**契约未漂移**。
+>    I6 已对照 alpha.3 `session-controller/contract/sessions.ts` 核对，`ISessions.fork`
+>    签名逐字一致（`fork({sessionId, atSeq?, increaseTitle?})`）。
+> 2. **图片可靠投递**（steer/follow-up 图片）：仅把 `SubagentPromptRequest.content`
+>    类型迁至 `dsh-attachment`（`PromptContentPart[]`），不触及插件的 chat.node slot、
+>    `renderMessageImages`、fork。I1/I2/I4/I5 复查无漂移。
+> 3. 其余（导航预览/渲染优化/权限文案/read_image/Tab 补全/断连误判/标题窄视口）均为
+>    UI 与工具层，与插件耦合点无关。
+> 结论：无需改码；升级后仍跑 `npm run check:dsh` + `npm run test:probe` 机器化钉住。
 
 ## 矩阵
 
