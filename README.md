@@ -66,15 +66,15 @@ dsh plugin --profile web add dsh-recall-plugin
 ```powershell
 dsh plugin --profile web add github:limbo947/dsh-recall-plugin
 ```
-- 重启 DSH 进程（按你的启动方式，任选其一）
+
+- 卸载：同时移除依赖与挂载，快照数据保留在 home 下 `dsh-recall-snapshots/`，想彻底清除手动删掉该目录即可。
 ```powershell
-dsh web                      # 前台直接启动
-pm2 restart <你的dsh进程名>   # 若用 pm2 托管
+dsh plugin --profile web remove dsh-recall-plugin
 ```
 
-**验证**：重启后硬刷新页面（Ctrl+Shift+R），悬停任意一条插件启用后发送的用户消息——复制按钮旁出现「↶」即生效。没有按钮？九成是没重启 DSH 进程，或 git CLI 不在 PATH 里。
+- 验证：重启后硬刷新页面（Ctrl+Shift+R），悬停任意一条插件启用后发送的用户消息——复制按钮旁出现「↶」即生效。没有按钮？九成是没重启 DSH 进程，或 git CLI 不在 PATH 里。
 
-**卸载**：`dsh plugin --profile web remove dsh-recall-plugin`（同时移除依赖与挂载层），快照数据保留在 home 下 `dsh-recall-snapshots/`，想彻底清除手动删掉该目录即可。
+
 
 ## 使用
 
